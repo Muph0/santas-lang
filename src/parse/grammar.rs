@@ -16,31 +16,41 @@ pub struct Loc<T> {
     t: T,
 }
 
-pub fn parse(input: &str) -> Result<TranslationUnit> {
-    let unit = match elf_parse::unit(input) {
-        Ok(unit) => unit,
+pub fn parse(name: String, input: &str) -> Result<TranslationUnit<&str>> {
+    let mut unit = TranslationUnit {
+        name: name,
+        ..Default::default()
+    };
+
+    match elf::unit(input, &mut unit) {
+        Ok(_) => {}
         Err(e) => return Err(Error::Parse(e)),
     };
 
     Ok(unit)
 }
 
-peg::parser! { grammar elf_parse() for str {
-    pub rule unit() -> TranslationUnit<'input> = {todo!()}
+// Top-level rules have side effects, they populate the translation unit.
+// Low-level rules should be pure.
+peg::parser! { grammar elf() for str {
 
-    pub rule shop() -> Shop<'input>
+    pub rule unit(u: &mut TranslationUnit<&'input str>)
+        = (s:shop() { u.workshops.insert(s.name, s); }) unit(u)
+        // (s:santa_block() { u.santa })
+
+    pub rule shop() -> Shop<&'input str>
         = kw("workshop") name:ident() ":" _ block:shop_block() _ ";" _ { Shop { name, block } }
 
-    rule shop_block() -> ShopBlock<'input>
+    rule shop_block() -> ShopBlock<&'input str>
         = kw("floorplan") ":" p:plan()? _ ";" _ { p.unwrap_or(ShopBlock::empty_plan()) }
 
-    rule plan() -> ShopBlock<'input>
+    rule plan() -> ShopBlock<&'input str>
         = (__ "\n") r1:plan_row(None) rs:plan_row(Some(&r1))* { ShopBlock::make_plan(r1, rs) }
 
-    rule plan_row(first: Option<&PlanRow>) -> PlanRow<'input>
+    rule plan_row(first: Option<&PlanRow<&'input str>>) -> PlanRow<&'input str>
         = (__ "\n")* i:indent_any() tiles:(plan_tile() ** " ") "\n" {? PlanRow { indent: i, tiles }.matches(first) }
 
-    rule plan_tile() -> Tile<'input>
+    rule plan_tile() -> Tile<&'input str>
         = ("  " / "..") { Tile::Empty }
         / "m" d:dir() { Tile::Move(d) }
         / "e" d:dir() { Tile::Elf(d) }
@@ -105,7 +115,7 @@ peg::parser! { grammar elf_parse() for str {
     rule _ -> usize = s:$(quiet!{[' ' | '\n' | '\t']*}) { s.len() }
 }}
 
-impl<'i> ShopBlock<'i> {
+impl<S: Clone> ShopBlock<S> {
     fn empty_plan() -> Self {
         Self::Plan {
             width: 0,
@@ -113,7 +123,7 @@ impl<'i> ShopBlock<'i> {
             map: vec![],
         }
     }
-    fn make_plan(r1: PlanRow<'i>, mut rows: Vec<PlanRow<'i>>) -> Self {
+    fn make_plan(r1: PlanRow<S>, mut rows: Vec<PlanRow<S>>) -> Self {
         rows.insert(0, r1);
 
         let width = rows.iter().map(|row| row.tiles.len()).max().unwrap();
@@ -134,8 +144,8 @@ impl<'i> ShopBlock<'i> {
     }
 }
 
-impl<'i> PlanRow<'i> {
-    fn matches(self, expect: Option<&PlanRow>) -> std::result::Result<Self, &'static str> {
+impl<S> PlanRow<S> {
+    fn matches(self, expect: Option<&PlanRow<S>>) -> std::result::Result<Self, &'static str> {
         let ind = self.indent;
         match expect {
             None => Ok(self),
@@ -154,7 +164,7 @@ mod test {
 
     #[test]
     fn parse_empty_shop() {
-        let shop = elf_parse::shop(
+        let shop = elf::shop(
             "
                 workshop test:
                     floorplan: ;
@@ -168,7 +178,7 @@ mod test {
         };
 
         match shop.block {
-            ShopBlock::Program(instrs) => panic!(),
+            ShopBlock::Program(_) => panic!(),
             ShopBlock::Plan { width, height, map } => {
                 assert_eq!(width, 0);
                 assert_eq!(height, 0);
@@ -179,7 +189,7 @@ mod test {
 
     #[test]
     fn parse_empty_tiles() {
-        let shop = elf_parse::shop(
+        let shop = elf::shop(
             "
                 workshop test:
                     floorplan:
@@ -196,7 +206,7 @@ mod test {
         };
 
         match shop.block {
-            ShopBlock::Program(instrs) => panic!(),
+            ShopBlock::Program(_) => panic!(),
             ShopBlock::Plan { width, height, map } => {
                 assert_eq!(width, 3);
                 assert_eq!(height, 2);
@@ -207,7 +217,7 @@ mod test {
 
     #[test]
     fn parse_shifted_indent() {
-        let shop = elf_parse::shop(
+        let shop = elf::shop(
             "
                 workshop test:
                     floorplan:
@@ -224,7 +234,7 @@ mod test {
         };
 
         match shop.block {
-            ShopBlock::Program(instrs) => panic!(),
+            ShopBlock::Program(_) => panic!(),
             ShopBlock::Plan { width, height, map } => {
                 assert_eq!(width, 3);
                 assert_eq!(height, 2);
