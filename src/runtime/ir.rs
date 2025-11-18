@@ -27,7 +27,7 @@ pub(super) struct Output {
     pub(super) monitor: Option<Arc<dyn Fn(&mut Runtime, Int)>>,
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Instr {
     #[default]
     Nop,
@@ -50,7 +50,7 @@ pub enum Instr {
     Hammock,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Op {
     Add,
     Sub,
