@@ -1,0 +1,8 @@
+[package]
+name = "elf-lang"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+log = "0.4.28"
+simple_logger = { version = "5.1.0", default-features = false, features = ["colored", "colors"] }

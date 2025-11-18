@@ -1,0 +1,40 @@
+```
+// Note: Tiles are made of two chars: Ab
+// A is type of tile
+// b is identifier
+
+
+//    .e = elf
+//    >  = go right
+//    P1 = push 1
+//    _n = pressure plate // flips state of all ^v></\ with the same identifier (only for this elf)
+//    ?n = lever // like pressure plate, but only when top of stack > 0
+//    Dn = dup n
+//    H  = hammock // elf will fall asleep here (forever)
+
+workshop fizzbuzz:
+      /.             _0                                  \.
+                     /. D0 %3 ?1 v1 _. >. D0 %5 ?2 v2 _2 ^.
+>e P1 >. D1 D1 -. ?0 \0          P0    Op          P1    Op
+                     H.          \. .. /.          \. .. /.
+
+.
+
+workshop print:
+               /. Pi PF \.
+>e I1 ?1 Pz Pz /1       >. Os Os Os Os \.
+               \. Pu PB /.
+\.                                     /.
+.
+
+Santa will:
+    setup f1 = fizzbuzz
+    setup p1 = print
+    setup f1.Op -> p1.I1
+
+    send elf(100) to f1
+    send elf() to p1
+
+    monitor p1.Os
+.
+```
