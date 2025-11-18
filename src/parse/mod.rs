@@ -35,8 +35,19 @@ pub struct PlanRow<'i> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Tile<'i> {
     Empty,
+    Move(Direction),
+    Elf(Direction),
+    Question,
     Instr(runtime::Instr),
     Unknown(&'i str),
 }
