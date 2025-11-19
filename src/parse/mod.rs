@@ -59,11 +59,23 @@ pub enum Tile<S> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToDo<S> {
-    SendElf { name: Option<S>, stack: Vec<Int> },
+    SendElf {
+        name: Option<S>,
+        stack: Vec<Int>,
+    },
+    Connect {
+        src: (S, char),
+        dst: (S, char),
+    },
+    Monitor {
+        target: S,
+        port: char,
+        todos: Vec<ToDo<S>>,
+    },
 }
 
 impl<S: Hash + Clone> TranslationUnit<S> {
-    pub fn convert<R: Hash + Clone + Eq>(self, f: impl Fn(S) -> R) -> TranslationUnit<R> {
+    pub fn convert<R: Hash + Clone + Eq>(self, f: &impl Fn(S) -> R) -> TranslationUnit<R> {
         TranslationUnit {
             name: self.name.clone(),
             workshops: self
@@ -71,12 +83,12 @@ impl<S: Hash + Clone> TranslationUnit<S> {
                 .into_iter()
                 .map(|(k, v)| (f(k), v.convert(&f)))
                 .collect(),
-            todos: self.todos.into_iter().map(|t| t.convert(&f)).collect(),
+            todos: self.todos.into_iter().map(|t| t.convert(f)).collect(),
         }
     }
 }
 impl<S> Shop<S> {
-    pub fn convert<R>(self, f: impl Fn(S) -> R) -> Shop<R> {
+    pub fn convert<R>(self, f: &impl Fn(S) -> R) -> Shop<R> {
         Shop {
             name: f(self.name),
             block: self.block.convert(f),
@@ -84,12 +96,12 @@ impl<S> Shop<S> {
     }
 }
 impl<S> ShopBlock<S> {
-    pub fn convert<R>(self, f: impl Fn(S) -> R) -> ShopBlock<R> {
+    pub fn convert<R>(self, f: &impl Fn(S) -> R) -> ShopBlock<R> {
         match self {
             ShopBlock::Plan { width, height, map } => ShopBlock::Plan {
                 width,
                 height,
-                map: map.into_iter().map(|t| t.convert(&f)).collect(),
+                map: map.into_iter().map(|t| t.convert(f)).collect(),
             },
             ShopBlock::Program(instrs) => ShopBlock::Program(instrs),
         }
@@ -108,12 +120,24 @@ impl<S> Tile<S> {
     }
 }
 impl<S> ToDo<S> {
-    pub fn convert<R>(self, f: impl Fn(S) -> R) -> ToDo<R> {
+    #[rustfmt::skip]
+    pub fn convert<R>(self, f: &impl Fn(S) -> R) -> ToDo<R> {
         match self {
             ToDo::SendElf { name, stack } => ToDo::SendElf {
                 name: name.map(f),
                 stack,
             },
+            ToDo::Connect { src, dst } => ToDo::Connect {
+                src: (f(src.0), src.1),
+                dst: (f(dst.0), dst.1),
+            },
+            ToDo::Monitor { target, port, todos } => {
+                ToDo::Monitor {
+                    target: f(target),
+                    port,
+                    todos: todos.into_iter().map(|x| x.convert(f)).collect(),
+                }
+            }
         }
     }
 }
@@ -141,7 +165,7 @@ fn demonstrate_convert() {
 
         // src.clear(); // fails, src is borrowed by unit
 
-        unit.convert::<Arc<str>>(|s| Arc::from(s))
+        unit.convert::<Arc<str>>(&|s| Arc::from(s))
     };
 
     println!("{unit:?}");
