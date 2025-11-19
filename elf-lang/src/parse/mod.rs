@@ -1,6 +1,8 @@
+//! This mod contains structs modelling the contents of a parsed file
+
 mod grammar;
 
-use std::{borrow::Cow, collections::HashMap, hash::Hash, sync::Arc};
+use std::{collections::HashMap, hash::Hash};
 
 use crate::{Int, runtime};
 
