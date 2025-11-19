@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
 members = [
-    "sasm-lang",
-    "sasm-comp",
+    "santa-lang",
+    "santa-comp",
 ]

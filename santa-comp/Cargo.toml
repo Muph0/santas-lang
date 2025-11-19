@@ -1,0 +1,14 @@
+[package]
+name = "santa-comp"
+version = "0.1.1"
+description = "Compiler/interpreter for the SantASM language"
+edition = "2024"
+
+[[bin]]
+name = "santac"
+path = "src/main.rs"
+
+[dependencies]
+santa-lang = { path = "../santa-lang" }
+clap = { version = "4.5.52", features = ["derive"] }
+log = "0.4.28"
