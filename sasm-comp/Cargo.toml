@@ -1,0 +1,8 @@
+[package]
+name = "sasm-comp"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+sasm-lang = { path = "../sasm-lang" }
+clap = "4.5.52"

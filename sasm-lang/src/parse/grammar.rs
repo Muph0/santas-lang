@@ -1,4 +1,4 @@
-use peg::{RuleResult, str::LineCol};
+use peg::{str::LineCol};
 
 use crate::{Instr, Int};
 
@@ -10,11 +10,11 @@ pub enum Error {
 }
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub struct Loc<T> {
-    start: usize,
-    end: usize,
-    t: T,
-}
+// pub struct Span<T> {
+//     start: usize,
+//     end: usize,
+//     t: T,
+// }
 
 pub fn parse(name: String, input: &str) -> Result<TranslationUnit<&str>> {
     let mut unit = TranslationUnit {
@@ -126,8 +126,8 @@ peg::parser! { grammar elf() for str {
         = _ s:$(quiet!{['a'..='z'|'A'..='Z'|'_']['a'..='z'|'A'..='Z'|'_'|'0'..='9']*}) _ { s }
         / expected!("identifier")
 
-    rule loc<T>(x: rule<T>) -> Loc<T>
-        = start:position!() t:x() end:position!() { Loc { start, end, t } }
+    // rule loc<T>(x: rule<T>) -> Span<T>
+    //     = start:position!() t:x() end:position!() { Span { start, end, t } }
 
     rule indent(expect: Option<Indent>) -> Indent
         = i:indent_any() {?

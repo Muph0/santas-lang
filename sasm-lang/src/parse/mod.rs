@@ -1,10 +1,10 @@
 //! This mod contains structs modelling the contents of a parsed file
 
-mod grammar;
-
 use std::{collections::HashMap, hash::Hash};
 
 use crate::{Int, runtime};
+
+mod grammar;
 
 /// The `TranslationUnit` is generic over a string type `S`,
 /// allowing flexibility in how text is represented (e.g. `&str`, `String`, `Cow<'_, str>`).
@@ -174,6 +174,8 @@ impl<S> Expr<S> {
 
 #[test]
 fn demonstrate_convert() {
+    use std::sync::Arc;
+
     let unit = {
         let src = String::from("shop_name,elf_name");
         let names: Vec<&str> = src.split(",").collect(); // represents parsed names
@@ -196,7 +198,7 @@ fn demonstrate_convert() {
 
         // src.clear(); // fails, src is borrowed by unit
 
-        unit.convert::<Arc<str>>(&|s| Arc::from(s))
+        unit.convert(&|s| Arc::<str>::from(s))
     };
 
     println!("{unit:?}");

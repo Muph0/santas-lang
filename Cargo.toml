@@ -1,5 +1,6 @@
 [workspace]
+resolver = "3"
 members = [
-    "elf-lang",
-    "elf-comp",
+    "sasm-lang",
+    "sasm-comp",
 ]
