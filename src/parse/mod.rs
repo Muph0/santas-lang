@@ -8,20 +8,20 @@ use crate::{Int, runtime};
 /// allowing flexibility in how text is represented (e.g. `&str`, `String`, `Cow<'_, str>`).
 /// Parsing may borrow strings from input, but you can later call `convert()`
 /// to transform all `S` values into another representation (such as fully owned `String`).
-#[derive(Debug, Default, Clone)]
-pub struct TranslationUnit<S: Hash + Clone> {
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct TranslationUnit<S: Clone + Eq + Hash> {
     pub name: String,
     pub workshops: HashMap<S, Shop<S>>,
     pub todos: Vec<ToDo<S>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shop<S> {
     pub name: S,
     pub block: ShopBlock<S>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShopBlock<S> {
     Plan {
         width: usize,
@@ -33,7 +33,7 @@ pub enum ShopBlock<S> {
 
 type Indent = (char, usize);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlanRow<S> {
     pub indent: Indent,
     pub tiles: Vec<Tile<S>>,
@@ -59,22 +59,36 @@ pub enum Tile<S> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToDo<S> {
-    SendElf {
+    /// Connect output of one shop to input of another shop.
+    SetupElf {
+        shop: S,
         name: Option<S>,
         stack: Vec<Int>,
     },
-    Connect {
-        src: (S, char),
-        dst: (S, char),
-    },
+    /// Connect output of one shop to input of another shop.
+    Connect { src: (S, char), dst: (S, char) },
+    /// Monitor a pipe and do stuff with incoming message.
     Monitor {
-        target: S,
-        port: char,
+        target: (S, char),
         todos: Vec<ToDo<S>>,
+    },
+    Receive {
+        src: Option<(S, char)>,
+        vars: Vec<S>,
+    },
+    Send {
+        dst: Option<(S, char)>,
+        values: Vec<Expr<S>>,
     },
 }
 
-impl<S: Hash + Clone> TranslationUnit<S> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Expr<S> {
+    Number(Int),
+    Var(S),
+}
+
+impl<S: Clone + Hash + Eq> TranslationUnit<S> {
     pub fn convert<R: Hash + Clone + Eq>(self, f: &impl Fn(S) -> R) -> TranslationUnit<R> {
         TranslationUnit {
             name: self.name.clone(),
@@ -120,24 +134,38 @@ impl<S> Tile<S> {
     }
 }
 impl<S> ToDo<S> {
-    #[rustfmt::skip]
     pub fn convert<R>(self, f: &impl Fn(S) -> R) -> ToDo<R> {
+        use ToDo::*;
         match self {
-            ToDo::SendElf { name, stack } => ToDo::SendElf {
+            SetupElf { name, stack, shop } => SetupElf {
                 name: name.map(f),
+                shop: f(shop),
                 stack,
             },
-            ToDo::Connect { src, dst } => ToDo::Connect {
+            Connect { src, dst } => Connect {
                 src: (f(src.0), src.1),
                 dst: (f(dst.0), dst.1),
             },
-            ToDo::Monitor { target, port, todos } => {
-                ToDo::Monitor {
-                    target: f(target),
-                    port,
-                    todos: todos.into_iter().map(|x| x.convert(f)).collect(),
-                }
-            }
+            Monitor { target, todos } => Monitor {
+                target: (f(target.0), target.1),
+                todos: todos.into_iter().map(|x| x.convert(f)).collect(),
+            },
+            Receive { src, vars } => Receive {
+                src: src.map(|x| (f(x.0), x.1)),
+                vars: vars.into_iter().map(|x| f(x)).collect(),
+            },
+            Send { dst, values } => Send {
+                dst: dst.map(|x| (f(x.0), x.1)),
+                values: values.into_iter().map(|x| x.convert(f)).collect(),
+            },
+        }
+    }
+}
+impl<S> Expr<S> {
+    pub fn convert<R>(self, f: &impl Fn(S) -> R) -> Expr<R> {
+        match self {
+            Expr::Number(n) => Expr::Number(n),
+            Expr::Var(s) => Expr::Var(f(s)),
         }
     }
 }
@@ -157,7 +185,8 @@ fn demonstrate_convert() {
                     block: ShopBlock::Program(vec![]),
                 },
             )]),
-            todos: vec![ToDo::SendElf {
+            todos: vec![ToDo::SetupElf {
+                shop: names[0],
                 name: Some(names[1]),
                 stack: vec![],
             }],

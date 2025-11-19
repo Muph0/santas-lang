@@ -87,15 +87,19 @@ peg::parser! { grammar elf() for str {
         }
 
     rule todo_item() -> ToDo<&'input str>
-        = word("setup") w:ident() word("for") h:helper_type() name:ident()? "(" stack:((n:number() {n as Int}) ** _) ")" {
-            match h {
-                HelperType::Elf => ToDo::SendElf { name, stack },
+        = word("setup") shop:ident() word("for") h:helper_type() name:ident()? "(" stack:numInt()* ")"
+            { match h {
+                HelperType::Elf => ToDo::SetupElf { name, stack, shop },
                 HelperType::Raindeer => todo!("raindeer"),
-            }
-        }
-        / word("setup") src:helper_port() "->" dst:helper_port() {
-            ToDo::Connect { src, dst, }
-        }
+            } }
+        / word("setup") src:helper_port() "->" dst:helper_port()
+            { ToDo::Connect { src, dst } }
+        / word("monitor") target:helper_port() ":" _ ts:todo_item()* _ ";" _
+            { ToDo::Monitor { target, todos: ts } }
+        / word("receive") vs:list(<ident()>) src:(word("from") p:helper_port() {p})?
+            { ToDo::Receive { vars: vs, src } }
+        / word("send") vs:list(<val_expr()>) dst:(word("to") p:helper_port() {p})?
+            { ToDo::Send { values: vs, dst } }
 
     rule helper_type() -> HelperType
         = word("elf") { HelperType::Elf }
@@ -104,12 +108,19 @@ peg::parser! { grammar elf() for str {
     rule helper_port() -> (&'input str, char)
         = name:ident() "." _ port:tile_ch() _ { (name, port) }
 
+    rule val_expr() -> Expr<&'input str>
+        = v:numInt() { Expr::Number(v) }
+        / id:ident() { Expr::Var(id) }
+
+    rule list<T>(x: rule<T>) -> Vec<T>
+        = "(" many:x() ** _ ")" { many }
+        / one:x() { vec![one] }
 
     rule word(expect: &'static str) -> &'input str
         = i:ident() {? if i == expect { Ok(i) } else { Err(expect)} }
 
-    rule number() -> i128
-        = _ n:$(['0'..='9']+) _ {? n.parse().or(Err("number")) }
+    rule num128() -> i128 = _ n:$(['0'..='9']+) _ {? n.parse().or(Err("i128")) }
+    rule numInt() -> Int = _ n:$(['0'..='9']+) _ {? n.parse().or(Err("Int")) }
 
     rule ident() -> &'input str
         = _ s:$(quiet!{['a'..='z'|'A'..='Z'|'_']['a'..='z'|'A'..='Z'|'_'|'0'..='9']*}) _ { s }
@@ -281,12 +292,15 @@ mod test {
             "
                 Santa will:
                     setup toys for elf Josh (1 2 3)
-                    setup toys for elf Bob ()
+                    setup prod for elf Bob ()
 
                     setup Josh.a -> Bob.1
 
                     monitor Josh.b:
-                        setup toys for elf Alice (4 5)
+                        receive (a b)
+                        receive x
+                        send (a 1234)
+                        setup sweets for elf Alice (4 5)
                     ;
                 ;
             ",
@@ -297,51 +311,49 @@ mod test {
             panic!("{e}")
         };
 
-        // Now check the todos inside the TranslationUnit
-        assert_eq!(tu.todos.len(), 4);
+        let expected = TranslationUnit {
+            name: "".into(),
+            workshops: Default::default(),
+            todos: vec![
+                ToDo::SetupElf {
+                    shop: "toys",
+                    name: Some("Josh".into()),
+                    stack: vec![1, 2, 3],
+                },
+                ToDo::SetupElf {
+                    shop: "prod",
+                    name: Some("Bob".into()),
+                    stack: vec![],
+                },
+                ToDo::Connect {
+                    src: ("Josh".into(), 'a'),
+                    dst: ("Bob".into(), '1'),
+                },
+                ToDo::Monitor {
+                    target: ("Josh".into(), 'b'),
+                    todos: vec![
+                        ToDo::Receive {
+                            src: None,
+                            vars: vec!["a", "b"],
+                        },
+                        ToDo::Receive {
+                            src: None,
+                            vars: vec!["x"],
+                        },
+                        ToDo::Send {
+                            dst: None,
+                            values: vec![Expr::Var("a"), Expr::Number(1234)],
+                        },
+                        ToDo::SetupElf {
+                            shop: "sweets",
+                            name: Some("Alice".into()),
+                            stack: vec![4, 5],
+                        },
+                    ],
+                },
+            ],
+        };
 
-        match &tu.todos[0] {
-            ToDo::SendElf { name, stack } => {
-                assert_eq!(*name, Some("Josh"));
-                assert_eq!(*stack, vec![1, 2, 3]);
-            }
-            _ => panic!("expected SendElf for Josh"),
-        }
-
-        match &tu.todos[1] {
-            ToDo::SendElf { name, stack } => {
-                assert_eq!(*name, Some("Bob"));
-                assert!(stack.is_empty());
-            }
-            _ => panic!("expected SendElf for Bob"),
-        }
-
-        match &tu.todos[2] {
-            ToDo::Connect { src, dst } => {
-                assert_eq!(*src, ("Josh", 'a'));
-                assert_eq!(*dst, ("Bob", '1'));
-            }
-            _ => panic!("expected Connect"),
-        }
-
-        match &tu.todos[3] {
-            ToDo::Monitor {
-                target,
-                port,
-                todos,
-            } => {
-                assert_eq!(*target, "Josh");
-                assert_eq!(*port, 'b');
-                assert_eq!(todos.len(), 1);
-                match &todos[0] {
-                    ToDo::SendElf { name, stack } => {
-                        assert_eq!(*name, Some("Alice"));
-                        assert_eq!(*stack, vec![4, 5]);
-                    }
-                    _ => panic!("expected nested SendElf for Alice"),
-                }
-            }
-            _ => panic!("expected Monitor"),
-        }
+        pretty_assertions::assert_eq!(expected, tu);
     }
 }

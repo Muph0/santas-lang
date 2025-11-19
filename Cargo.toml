@@ -7,3 +7,6 @@ edition = "2024"
 log = "0.4.28"
 peg = "0.8.5"
 simple_logger = { version = "5.1.0", default-features = false, features = ["colored", "colors"] }
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"
