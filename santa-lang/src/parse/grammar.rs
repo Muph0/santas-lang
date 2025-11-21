@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use peg::str::LineCol;
 
-use crate::{Instr, Int};
+use crate::ir::{Instr, Int};
 
 use super::*;
 
@@ -213,8 +213,6 @@ impl<S> PlanRow<S> {
 
 #[cfg(test)]
 mod test {
-    use crate::Instr;
-
     use super::*;
 
     #[test]
@@ -341,7 +339,7 @@ mod test {
         };
 
         use {
-            crate::{Instr::*, Op::*},
+            crate::ir::{Instr::*, Op::*},
             Direction::*,
             Tile::*,
         };

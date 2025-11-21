@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, hash::Hash};
 
-use crate::{Int, runtime, translate::Loc};
+use crate::{ir::Int, runtime};
 
 mod grammar;
 pub use grammar::*;

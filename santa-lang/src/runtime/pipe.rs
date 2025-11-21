@@ -35,7 +35,7 @@ impl<T: Clone> InputPipe<T> {
             _ = tx.send(t);
         }
     }
-    pub fn try_read(&mut self) -> Result<T, InputError> {
+    pub fn try_read(&self) -> Result<T, InputError> {
         match self.rx.try_recv() {
             Ok(v) => Ok(v),
             Err(mpsc::TryRecvError::Disconnected) => Err(InputError::Closed),

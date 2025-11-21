@@ -1,10 +1,11 @@
 pub mod parse;
 pub mod translate;
 pub mod logger;
-mod runtime;
+pub mod ir;
+pub mod runtime;
 
 pub use parse::parse;
-pub use runtime::*;
+
 
 #[cfg(test)]
 mod test {
@@ -17,7 +18,7 @@ mod test {
         crate::logger::init(log::LevelFilter::Debug);
 
         #[rustfmt::skip]
-        let fizzbuzz = Room::new(vec![      // 100
+        let fizzbuzz = ElfProgram::new(vec![      // 100
             Push(1),                        // 100 1
             Label("loop"),
                 Dup(1),                     // 100 1 100
@@ -61,7 +62,7 @@ mod test {
         ]);
 
         #[rustfmt::skip]
-        let print = Room::new(vec![ // num: =-1->Fizz, =-2->Buzz, else print num
+        let print = ElfProgram::new(vec![ // num: =-1->Fizz, =-2->Buzz, else print num
             Label("start"),
             In(1),                          // num
 
@@ -131,7 +132,7 @@ mod test {
             print!("{}", n as u8 as char);
         });
 
-        let mut rt = Runtime::new(vec![elf_fizzbuzz, elf_print]);
+        let mut rt = Program::new(vec![elf_fizzbuzz, elf_print]);
 
         rt.run_loop().unwrap_or_else(|e| panic!("{e}"))
     }

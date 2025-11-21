@@ -4,7 +4,7 @@ use peg::{error::ParseError, str::LineCol};
 use std::{collections::HashMap, fmt, fs, path::PathBuf, sync::Arc};
 
 use crate::{
-    Elf, Instr, Room, Runtime,
+    Elf, Instr, ElfProgram, Program,
     parse::{ShopBlock, Tile, ToDo, TranslationUnit},
 };
 use loc::{LineMap, SourceStr};
@@ -19,7 +19,7 @@ pub enum TranslationInput {
     File(PathBuf),
 }
 
-pub fn translate(inputs: Vec<TranslationInput>) -> Result<Runtime, Vec<Error>> {
+pub fn translate(inputs: Vec<TranslationInput>) -> Result<Program, Vec<Error>> {
     let mut errors = Vec::new();
 
     let unit = read_into_unit(inputs, &mut errors);
@@ -48,7 +48,7 @@ pub fn translate(inputs: Vec<TranslationInput>) -> Result<Runtime, Vec<Error>> {
                     if let Some(plan) = plans.next() {
                         let prog = translate_plan(&shop.name, plan, &mut errors);
                         if let Some(p) = prog {
-                            rooms.insert(shop.name.string.clone(), Room::new(p));
+                            rooms.insert(shop.name.string.clone(), ElfProgram::new(p));
                         }
                     } else {
                         errors.push(Error::at(&shop.name, ECode::MissingPlan));
@@ -68,7 +68,7 @@ pub fn translate(inputs: Vec<TranslationInput>) -> Result<Runtime, Vec<Error>> {
     }
 
     match errors.is_empty() {
-        true => Ok(Runtime::new(elves)),
+        true => Ok(Program::new(elves)),
         false => Err(errors),
     }
 }
