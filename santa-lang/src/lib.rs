@@ -1,7 +1,9 @@
-mod parse;
+pub mod parse;
+pub mod translate;
+pub mod logger;
 mod runtime;
-mod translate;
 
+pub use parse::parse;
 pub use runtime::*;
 
 #[cfg(test)]
@@ -12,7 +14,7 @@ mod test {
 
     #[test]
     pub fn test1() {
-        simple_logger::init_with_level(log::Level::Debug).unwrap();
+        crate::logger::init(log::LevelFilter::Debug);
 
         #[rustfmt::skip]
         let fizzbuzz = Room::new(vec![      // 100

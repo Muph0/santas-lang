@@ -1,0 +1,65 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'santa_lang'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=santa-lang"
+                ],
+                "filter": {
+                    "name": "santa_lang",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'santac'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=santac",
+                    "--package=santac"
+                ],
+                "filter": {
+                    "name": "santac",
+                    "kind": "bin"
+                }
+            },
+            "args": ["examples/fibo.sasm", "-i"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'santac'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=santac",
+                    "--package=santac"
+                ],
+                "filter": {
+                    "name": "santac",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

@@ -1,13 +1,12 @@
-use peg::{str::LineCol};
+use std::fmt::Debug;
+
+use peg::str::LineCol;
 
 use crate::{Instr, Int};
 
 use super::*;
 
-#[derive(Debug)]
-pub enum Error {
-    Parse(peg::error::ParseError<LineCol>),
-}
+pub type Error = peg::error::ParseError<LineCol>;
 pub type Result<T> = std::result::Result<T, Error>;
 
 // pub struct Span<T> {
@@ -16,48 +15,53 @@ pub type Result<T> = std::result::Result<T, Error>;
 //     t: T,
 // }
 
-pub fn parse(name: String, input: &str) -> Result<TranslationUnit<&str>> {
-    let mut unit = TranslationUnit {
-        name: name,
-        ..Default::default()
-    };
+pub fn parse(input: &str) -> Result<TranslationUnit<&str>> {
+    log::trace!("parsing\n{input:?}");
 
-    match elf::unit(input, &mut unit) {
-        Ok(_) => {}
-        Err(e) => return Err(Error::Parse(e)),
-    };
+    let mut unit = TranslationUnit::default();
+    santasm::unit(input, &mut unit).map(|_| unit)
+}
 
-    Ok(unit)
+#[cfg(test)]
+pub(crate) fn parse_plan(input: &str) -> Result<ShopBlock<&str>> {
+    santasm::plan(input)
 }
 
 // Top-level rules have side effects, they populate the translation unit.
 // Low-level rules should be pure.
-peg::parser! { grammar elf() for str {
+peg::parser! { grammar santasm() for str {
 
     pub rule unit(u: &mut TranslationUnit<&'input str>)
         = (s:shop() { u.workshops.insert(s.name, s); }) unit(u)
-        // (s:santa_block() { u.santa }) TODO
+        / santa_block(u) unit(u)
+        / _ {}
 
     pub rule shop() -> Shop<&'input str>
-        = word("workshop") name:ident() ":" _ block:shop_block() _ ";" _ { Shop { name, block } }
+        = word("workshop") name:ident() ":" _ blocks:shop_block()* _ ";" _ { Shop { name, blocks } }
 
     rule shop_block() -> ShopBlock<&'input str>
         = word("floorplan") ":" p:plan()? _ ";" _ { p.unwrap_or(ShopBlock::empty_plan()) }
 
-    rule plan() -> ShopBlock<&'input str>
-        = (__ "\n") r1:plan_row(None) rs:plan_row(Some(&r1))* { ShopBlock::make_plan(r1, rs) }
+    pub rule plan() -> ShopBlock<&'input str>
+        = (__ NL()) r1:plan_row(None) rs:plan_row(Some(&r1))* _ { ShopBlock::make_plan(r1, rs) }
 
     rule plan_row(first: Option<&PlanRow<&'input str>>) -> PlanRow<&'input str>
-        = (__ "\n")* i:indent_any() tiles:(plan_tile() ** " ") "\n" {? PlanRow { indent: i, tiles }.matches(first) }
+        = (__ NL())* i:indent_any() tiles:(plan_tile() ** " ") NL() {? PlanRow { indent: i, tiles }.matches(first) }
 
     rule plan_tile() -> Tile<&'input str>
         = ("  " / "..") { Tile::Empty }
         / "m" d:dir() { Tile::Move(d) }
         / "e" d:dir() { Tile::Elf(d) }
         / "P" n:tile_param() { Tile::Instr(Instr::Push(n)) }
+        / d1:digit() d0:digit() { Tile::Instr(Instr::Push(d1 as Int * 10 + d0 as Int)) }
         / "D" d:digit() { Tile::Instr(Instr::Dup(d)) }
         / "E" d:digit() { Tile::Instr(Instr::Erase(d)) }
-        / op:arith_op() "." { Tile::Instr(Instr::Arith(op)) }
+        / "S" d:digit() { Tile::Instr(Instr::Swap(d)) }
+        / "Hm" { Tile::Instr(Instr::Hammock) }
+        / "?=" { Tile::IsZero }
+        / "?>" { Tile::IsPos }
+        / "?<" { Tile::IsNeg }
+        / op:arith_op() "_" { Tile::Instr(Instr::Arith(op)) }
         / op:arith_op() d:digit() { Tile::Instr(Instr::ArithC(op, d as Int)) }
         // s:$(tile_ch()*<2>) { Tile::Unknown(s) }
 
@@ -117,16 +121,18 @@ peg::parser! { grammar elf() for str {
         / one:x() { vec![one] }
 
     rule word(expect: &'static str) -> &'input str
-        = i:ident() {? if i == expect { Ok(i) } else { Err(expect)} }
+        = i:alnum() {? if i == expect { Ok(i) } else { Err(expect)} }
 
     rule num128() -> i128 = _ n:$(['0'..='9']+) _ {? n.parse().or(Err("i128")) }
     rule numInt() -> Int = _ n:$(['0'..='9']+) _ {? n.parse().or(Err("Int")) }
 
     rule ident() -> &'input str
-        = _ s:$(quiet!{['a'..='z'|'A'..='Z'|'_']['a'..='z'|'A'..='Z'|'_'|'0'..='9']*}) _ { s }
+        = alnum()
         / expected!("identifier")
 
-    // rule loc<T>(x: rule<T>) -> Span<T>
+    rule alnum() -> &'input str = _ s:$(quiet!{['a'..='z'|'A'..='Z'|'_']['a'..='z'|'A'..='Z'|'_'|'0'..='9']*}) _ {s}
+
+    // rule loc<T>(x: rule<T>) -> (T, Loc)
     //     = start:position!() t:x() end:position!() { Span { start, end, t } }
 
     rule indent(expect: Option<Indent>) -> Indent
@@ -144,9 +150,10 @@ peg::parser! { grammar elf() for str {
         / expected!("uniform indentation")
 
     rule todo() = { todo!() }
+    rule NL() = "\n" / "\r\n"
 
-    rule __ -> usize = s:$(quiet!{[' ' | '\t']*}) { s.len() }
-    rule _ -> usize = s:$(quiet!{[' ' | '\n' | '\t']*}) { s.len() }
+    rule __ -> usize = s:$(quiet!{[' ' | '\r' | '\x0b' | '\x0c' | '\t']*}) { s.len() }
+    rule _ -> usize = s:$(quiet!{[' ' | '\r' | '\x0b' | '\x0c' | '\t' | '\n']*}) { s.len() }
 }}
 
 enum HelperType {
@@ -154,7 +161,7 @@ enum HelperType {
     Raindeer,
 }
 
-impl<S: Clone> ShopBlock<S> {
+impl<S: Clone + Debug> ShopBlock<S> {
     fn empty_plan() -> Self {
         Self::Plan {
             width: 0,
@@ -165,12 +172,21 @@ impl<S: Clone> ShopBlock<S> {
     fn make_plan(r1: PlanRow<S>, mut rows: Vec<PlanRow<S>>) -> Self {
         rows.insert(0, r1);
 
-        let width = rows.iter().map(|row| row.tiles.len()).max().unwrap();
+        for r in rows.iter() {
+            log::trace!("row {r:?}");
+        }
+
+        let leftmost_ind = rows.iter().map(|row| row.indent.1).min().unwrap();
+
+        let width = rows
+            .iter()
+            .map(|row| row.tiles.len() + (row.indent.1 - leftmost_ind) / 3)
+            .max()
+            .unwrap();
+
         let height = rows.len();
         let mut map = Vec::new();
         map.resize(width * height, Tile::Empty);
-
-        let leftmost_ind = rows.iter().map(|row| row.indent.1).min().unwrap();
 
         for (y, row) in rows.into_iter().enumerate() {
             for (x_padded, tile) in row.tiles.into_iter().enumerate() {
@@ -203,7 +219,7 @@ mod test {
 
     #[test]
     fn parse_empty_shop() {
-        let shop = elf::shop(
+        let shop = santasm::shop(
             "
                 workshop test:
                     floorplan: ;
@@ -216,19 +232,21 @@ mod test {
             Ok(s) => s,
         };
 
-        match shop.block {
-            ShopBlock::Program(_) => panic!(),
-            ShopBlock::Plan { width, height, map } => {
-                assert_eq!(width, 0);
-                assert_eq!(height, 0);
-                assert_eq!(map.len(), 0);
-            }
-        }
+        let expected = Shop {
+            name: "test",
+            blocks: vec![ShopBlock::Plan {
+                width: 0,
+                height: 0,
+                map: vec![],
+            }],
+        };
+
+        pretty_assertions::assert_eq!(shop, expected);
     }
 
     #[test]
     fn parse_empty_tiles() {
-        let shop = elf::shop(
+        let shop = santasm::shop(
             "
                 workshop test:
                     floorplan:
@@ -244,19 +262,28 @@ mod test {
             Ok(s) => s,
         };
 
-        match shop.block {
-            ShopBlock::Program(_) => panic!(),
-            ShopBlock::Plan { width, height, map } => {
-                assert_eq!(width, 3);
-                assert_eq!(height, 2);
-                map.iter().for_each(|t| assert_eq!(t, &Tile::Empty));
-            }
-        }
+        let expected = Shop {
+            name: "test",
+            blocks: vec![ShopBlock::Plan {
+                width: 3,
+                height: 2,
+                map: vec![
+                    Tile::Empty,
+                    Tile::Empty,
+                    Tile::Empty,
+                    Tile::Empty,
+                    Tile::Empty,
+                    Tile::Empty,
+                ],
+            }],
+        };
+
+        pretty_assertions::assert_eq!(shop, expected);
     }
 
     #[test]
     fn parse_shifted_indent() {
-        let shop = elf::shop(
+        let shop = santasm::shop(
             "
                 workshop test:
                     floorplan:
@@ -272,23 +299,75 @@ mod test {
             Ok(s) => s,
         };
 
-        match shop.block {
-            ShopBlock::Program(_) => panic!(),
-            ShopBlock::Plan { width, height, map } => {
-                assert_eq!(width, 3);
-                assert_eq!(height, 2);
-                assert_eq!(map[0], Tile::Elf(Direction::Right));
-                assert_eq!(map[2], Tile::Move(Direction::Down));
-                assert_eq!(map[4], Tile::Empty);
-                assert_eq!(map[5], Tile::Instr(Instr::Push(0)));
-            }
-        }
+        let expected = Shop {
+            name: "test",
+            blocks: vec![ShopBlock::Plan {
+                width: 3,
+                height: 2,
+                map: vec![
+                    Tile::Elf(Direction::Right),
+                    Tile::Empty,
+                    Tile::Move(Direction::Down),
+                    Tile::Empty,
+                    Tile::Empty,
+                    Tile::Instr(runtime::Instr::Push(0)),
+                ],
+            }],
+        };
+
+        pretty_assertions::assert_eq!(shop, expected);
+    }
+
+    #[test]
+    fn parse_weird_hm() {
+        crate::logger::init(log::LevelFilter::Trace);
+        let shop = santasm::shop(
+            "
+                workshop weird_Hm:
+                    floorplan:
+                    mv    S1 -1 m<
+                          m>       Hm
+                 e> m> D1 ?>    S1
+                          m> D0 ?>
+                          m^ -1 m<
+                    ;
+                ;
+            ",
+        );
+
+        let shop = match shop {
+            Err(e) => panic!("{e}"),
+            Ok(s) => s,
+        };
+
+        use {
+            crate::{Instr::*, Op::*},
+            Direction::*,
+            Tile::*,
+        };
+        let expected = Shop {
+            name: "weird_Hm",
+            blocks: vec![ShopBlock::Plan {
+                width: 7,
+                height: 5,
+                #[rustfmt::skip]
+                map: vec![
+                    Empty, Move(Down), Empty, Instr(Swap(1)), Instr(ArithC(Sub, 1)), Move(Left), Empty,
+                    Empty, Empty, Empty, Move(Right), Empty, Empty, Instr(Hammock),
+                    Elf(Right), Move(Right), Instr(Dup(1)), IsPos, Empty, Instr(Swap(1)), Empty,
+                    Empty, Empty, Empty, Move(Right), Instr(Dup(0)), IsPos, Empty,
+                    Empty, Empty, Empty, Move(Up), Instr(ArithC(Sub, 1)), Move(Left), Empty,
+                ],
+            }],
+        };
+
+        pretty_assertions::assert_eq!(shop, expected);
     }
 
     #[test]
     fn parse_santa_block() {
         let mut tu = TranslationUnit::default();
-        let r = elf::santa_block(
+        let r = santasm::santa_block(
             "
                 Santa will:
                     setup toys for elf Josh (1 2 3)
@@ -312,7 +391,6 @@ mod test {
         };
 
         let expected = TranslationUnit {
-            name: "".into(),
             workshops: Default::default(),
             todos: vec![
                 ToDo::SetupElf {
@@ -355,5 +433,27 @@ mod test {
         };
 
         pretty_assertions::assert_eq!(expected, tu);
+    }
+
+    #[test]
+    fn unit_parse_empty() {
+        let mut u = TranslationUnit::default();
+        santasm::unit("    \n\n  \r\n\r\n   \t  ", &mut u).unwrap();
+    }
+
+    #[test]
+    fn unit_parse_empty_shops() {
+        let mut u = TranslationUnit::default();
+        santasm::unit(
+            "
+
+            workshop w1:; workshop w2:;
+
+            workshop w3:;
+
+            ",
+            &mut u,
+        )
+        .unwrap();
     }
 }

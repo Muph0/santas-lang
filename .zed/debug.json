@@ -1,0 +1,31 @@
+// Project-local debug tasks
+//
+// For more documentation on how to configure debug tasks,
+// see: https://zed.dev/docs/debugger
+[
+  {
+    "adapter": "CodeLLDB",
+    "label": "run santac",
+    "request": "launch",
+    "args": ["examples/fibo.gift", "-i"],
+    "build": {
+      "label": "run santac",
+      "command": "cargo",
+      "args": ["build", "--package", "santac", "--bin", "santac"],
+      "env": {
+        "RUSTC_TOOLCHAIN": "C:\\Users\\kytka\\.rustup\\toolchains\\stable-x86_64-pc-windows-msvc"
+      },
+      "cwd": "C:\\Users\\kytka\\source\\recreation\\santasm",
+      "use_new_terminal": false,
+      "allow_concurrent_runs": false,
+      "reveal": "always",
+      "reveal_target": "dock",
+      "hide": "never",
+      "tags": [],
+      "shell": "system",
+      "show_summary": false,
+      "show_command": false
+    },
+    "sourceLanguages": ["rust"]
+  }
+]

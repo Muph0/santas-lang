@@ -31,23 +31,25 @@ pub(super) struct Output {
 pub enum Instr {
     #[default]
     Nop,
-    Label(&'static str),
     Push(Int),
     Dup(usize),   // push n-th from top to the top
     Erase(usize), // remove n-th from top
     Tuck(usize),  // insert top before n-th from top
     Swap(usize),  // swap top with n-th from top
-    Jmp(&'static str),
-    JmpPtr(usize),
-    IfPos(&'static str),
-    IfPosPtr(usize),
-    IfNz(&'static str),
-    IfNzPtr(usize),
+    JmpPtr(usize), // jump to usize
+    IfPosPtr(usize), // if top>0, jump to usize
+    IfNzPtr(usize), // if top!=0, jump to usize
     Arith(Op),
     ArithC(Op, Int),
     In(Port),
     Out(Port),
     Hammock,
+
+    // human-friendly branches only used in tests
+    Label(&'static str),
+    Jmp(&'static str),
+    IfPos(&'static str),
+    IfNz(&'static str),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

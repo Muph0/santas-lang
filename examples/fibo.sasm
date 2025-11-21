@@ -1,0 +1,12 @@
+
+workshop fibo:
+    floorplan:
+                 Hm
+        e> -1 D2 ?=
+        m^
+    ;
+;
+
+Santa will:
+    setup fibo for elf Fibo (10 0 1)
+;

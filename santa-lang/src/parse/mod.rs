@@ -2,17 +2,17 @@
 
 use std::{collections::HashMap, hash::Hash};
 
-use crate::{Int, runtime};
+use crate::{Int, runtime, translate::Loc};
 
 mod grammar;
+pub use grammar::*;
 
 /// The `TranslationUnit` is generic over a string type `S`,
 /// allowing flexibility in how text is represented (e.g. `&str`, `String`, `Cow<'_, str>`).
 /// Parsing may borrow strings from input, but you can later call `convert()`
 /// to transform all `S` values into another representation (such as fully owned `String`).
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TranslationUnit<S: Clone + Eq + Hash> {
-    pub name: String,
     pub workshops: HashMap<S, Shop<S>>,
     pub todos: Vec<ToDo<S>>,
 }
@@ -20,7 +20,7 @@ pub struct TranslationUnit<S: Clone + Eq + Hash> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shop<S> {
     pub name: S,
-    pub block: ShopBlock<S>,
+    pub blocks: Vec<ShopBlock<S>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,22 +41,50 @@ pub struct PlanRow<S> {
     pub tiles: Vec<Tile<S>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Direction {
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
+/// Elf walks on tiles in a straight line, unless
+/// - Move or Is___ tells him to change direction
+/// - Instr::Hammock tells him to halt
+/// - He walks into a wall or Unknown, which is error
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Tile<S> {
     Empty,
     Move(Direction),
+    /// Starting point, has no effect if walked on later.
     Elf(Direction),
-    Question,
+    /// IsX means if top of stack is X, go right, otherwise go left
+    IsZero,
+    IsNeg,
+    IsPos,
     Instr(runtime::Instr),
     Unknown(S),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Direction {
+    Right,
+    Down,
+    Left,
+    Up,
+}
+impl Direction {
+    pub fn left(self) -> Self {
+        use Direction::*;
+        match self {
+            Up => Left,
+            Left => Down,
+            Down => Right,
+            Right => Up,
+        }
+    }
+    pub fn right(self) -> Self {
+        use Direction::*;
+        match self {
+            Up => Right,
+            Right => Down,
+            Down => Left,
+            Left => Up,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,10 +118,18 @@ pub enum Expr<S> {
     Var(S),
 }
 
+impl<S: Clone + Eq + Hash> Default for TranslationUnit<S> {
+    fn default() -> Self {
+        Self {
+            workshops: Default::default(),
+            todos: Default::default(),
+        }
+    }
+}
+
 impl<S: Clone + Hash + Eq> TranslationUnit<S> {
     pub fn convert<R: Hash + Clone + Eq>(self, f: &impl Fn(S) -> R) -> TranslationUnit<R> {
         TranslationUnit {
-            name: self.name.clone(),
             workshops: self
                 .workshops
                 .into_iter()
@@ -107,7 +143,7 @@ impl<S> Shop<S> {
     pub fn convert<R>(self, f: &impl Fn(S) -> R) -> Shop<R> {
         Shop {
             name: f(self.name),
-            block: self.block.convert(f),
+            blocks: self.blocks.into_iter().map(|b| b.convert(f)).collect(),
         }
     }
 }
@@ -125,13 +161,16 @@ impl<S> ShopBlock<S> {
 }
 impl<S> Tile<S> {
     pub fn convert<R>(self, f: impl Fn(S) -> R) -> Tile<R> {
+        use Tile::*;
         match self {
-            Tile::Empty => Tile::Empty,
-            Tile::Move(d) => Tile::Move(d),
-            Tile::Elf(d) => Tile::Elf(d),
-            Tile::Question => Tile::Question,
-            Tile::Instr(i) => Tile::Instr(i),
-            Tile::Unknown(s) => Tile::Unknown(f(s)),
+            Empty => Empty,
+            Move(d) => Move(d),
+            Elf(d) => Elf(d),
+            IsNeg => IsNeg,
+            IsPos => IsPos,
+            IsZero => IsZero,
+            Instr(i) => Instr(i),
+            Unknown(s) => Unknown(f(s)),
         }
     }
 }
@@ -181,12 +220,11 @@ fn demonstrate_convert() {
         let names: Vec<&str> = src.split(",").collect(); // represents parsed names
 
         let unit = TranslationUnit {
-            name: "name".to_string(),
             workshops: HashMap::from([(
                 names[0],
                 Shop {
                     name: names[0],
-                    block: ShopBlock::Program(vec![]),
+                    blocks: vec![],
                 },
             )]),
             todos: vec![ToDo::SetupElf {
