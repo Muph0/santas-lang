@@ -96,7 +96,10 @@ pub enum ToDo<S> {
         stack: Vec<Int>,
     },
     /// Connect output of one shop to input of another shop.
-    Connect { src: (S, char), dst: (S, char) },
+    Connect {
+        src: (S, char),
+        dst: (S, char),
+    },
     /// Monitor a pipe and do stuff with incoming message.
     Monitor {
         target: (S, char),
@@ -109,6 +112,9 @@ pub enum ToDo<S> {
     Send {
         dst: Option<(S, char)>,
         values: Vec<Expr<S>>,
+    },
+    Deliver {
+        e: Expr<S>,
     },
 }
 
@@ -199,6 +205,7 @@ impl<S> ToDo<S> {
                 dst: dst.map(|x| (f(x.0), x.1)),
                 values: values.into_iter().map(|x| x.convert(f)).collect(),
             },
+            Deliver { e } => Deliver { e: e.convert(f) },
         }
     }
 }

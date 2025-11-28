@@ -8,6 +8,9 @@ pub struct Args {
     #[arg(short, long, help = "Run the the files directly, without compiling.")]
     pub interpret: bool,
 
+    #[arg(long, help = "Ouput translation and execution trace.")]
+    pub trace: bool,
+
     pub files: Vec<PathBuf>,
 }
 

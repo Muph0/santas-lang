@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::parse::Tile;
 
@@ -16,7 +16,7 @@ pub type RoomId = usize;
 pub type SantaLine = usize;
 pub type ElfLine = usize;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SantaCode {
     SetupElf {
         name: Option<String>,
@@ -36,11 +36,21 @@ pub enum SantaCode {
     /// send (elf, port, expr)
     Send(SantaLine, Port, SantaLine),
     SendConst(SantaLine, Port, Int),
+    Deliver(SantaLine),
+}
+impl SantaCode {
+    pub(crate) fn unwrap_monitor(&self) -> ((SantaLine, Port), usize) {
+        match self {
+            SantaCode::Monitor { port, block_len } => (*port, *block_len),
+            _ => panic!("{self:?}"),
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct Room {
-    pub tiles: HashMap<(i32, i32), (String, Tile<String>)>,
+    /// Mapping: ip -> x,y,tile
+    pub tiles: HashMap<usize, (i32, i32, Tile<Arc<str>>)>,
     pub elf_program: Vec<Instr>,
 }
 
@@ -50,7 +60,7 @@ pub enum Instr {
     Nop,
     Push(Int),
     Dup(usize),        // push n-th from top to the top
-    Erase(usize),      // remove n-th from top
+    Remove(usize),      // remove n-th from top
     Tuck(usize),       // insert top before n-th from top
     Swap(usize),       // swap top with n-th from top
     JmpPtr(ElfLine),   // jump to usize
@@ -78,16 +88,15 @@ pub enum Op {
     Mod,
 }
 
-#[derive(Debug)]
-pub enum Error {
-    InvalidIndex(usize),
-    InvalidInstr,
-    DivisionByZero,
+pub fn to_port(src: char) -> Port {
+    src as u16
 }
 
 impl Room {
     #[cfg(test)]
-    pub fn new_test(mut elf_program: Vec<Instr>) -> Arc<Self> {
+    pub fn test_elf(mut elf_program: Vec<Instr>) -> Self {
+        use std::mem;
+
         let mut labels: HashMap<&str, usize> = HashMap::new();
         for (i, instr) in elf_program.iter().enumerate() {
             if let Instr::Label(name) = instr {
@@ -113,52 +122,5 @@ impl Room {
             tiles: Default::default(),
             elf_program,
         }
-        .into()
     }
 }
-
-// impl Elf {
-//     pub fn new(room: Arc<Room>, stack: Vec<Int>) -> Self {
-//         Self {
-//             room,
-//             name: None,
-//             instr: 0,
-//             init_stack: stack,
-//             inputs: Default::default(),
-//             outputs: Default::default(),
-//             finished: false,
-//         }
-//     }
-
-//     pub fn connect(&mut self, out_port: Port, (other, other_input): (&mut Elf, Port)) {
-//         let output = self
-//             .outputs
-//             .entry(out_port)
-//             .or_insert_with(|| Output::default());
-
-//         other
-//             .inputs
-//             .entry(other_input)
-//             .and_modify(|input| input.connect(&mut output.pipe))
-//             .or_insert_with(|| InputPipe::new_connected(&mut output.pipe));
-//     }
-
-//     pub fn monitor(&mut self, port: Port, monitor: impl Fn(&mut Program, Int) + 'static) {
-//         self.outputs
-//             .entry(port)
-//             .or_insert_with(|| Output::default())
-//             .monitor
-//             .replace(Arc::new(monitor));
-//     }
-
-//     pub(super) fn top_idx(&self, from_top: usize) -> Result<usize, Error> {
-//         let stack_len = self.init_stack.len();
-//         match from_top < stack_len {
-//             true => Ok(stack_len - from_top - 1),
-//             false => Err(Error::InvalidIndex(from_top)),
-//         }
-//     }
-//     pub(super) fn top_val(&self, from_top: usize) -> Result<Int, Error> {
-//         Ok(self.init_stack[self.top_idx(from_top)?])
-//     }
-// }

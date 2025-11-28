@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    Instr,
+    ir::{Instr, Op, Room},
     parse::{Direction, Tile},
     translate::{ECode, Error, loc::SourceStr},
 };
@@ -64,7 +64,7 @@ pub fn translate_plan(
     shop_name: &SourceStr,
     plan: (usize, usize, &[Tile<SourceStr>]),
     errors: &mut Vec<Error>,
-) -> Option<Vec<Instr>> {
+) -> Option<Room> {
     let (w, h, tiles) = plan;
 
     // find start
@@ -83,7 +83,7 @@ pub fn translate_plan(
     }
 
     // emitted code
-    let mut emit = Vec::new();
+    let mut emit: Vec<(Instr, ElfState)> = Vec::new();
 
     // map visited tile to instruction index emitted after that tile
     let mut visited = HashMap::<ElfState, usize>::new();
@@ -100,7 +100,7 @@ pub fn translate_plan(
 
         // if we hit a visited tile, emit Jump and bail
         if let Some(iptr) = visited.get(&elf) {
-            emit.push(Instr::JmpPtr(*iptr));
+            emit.push((Instr::JmpPtr(*iptr), elf));
             continue;
         }
 
@@ -117,7 +117,7 @@ pub fn translate_plan(
         // because we are AT the target pointer
         if let Some(from) = from {
             let emit_len = emit.len();
-            match &mut emit[from] {
+            match &mut emit[from].0 {
                 Instr::JmpPtr(target) | Instr::IfPosPtr(target) | Instr::IfNzPtr(target) => {
                     *target = emit_len;
                 }
@@ -137,21 +137,21 @@ pub fn translate_plan(
                 let false_elf = elf.step_left();
                 next = true_elf; // true now, false branch will be processed later
                 bfs.push_back((false_elf, Some(emit.len()))); // we save "where from" on the stack because
-                emit.push(Instr::IfNzPtr(emit.len() + 1)); // we dont know where to jump yet (default to here+1=nop)
+                emit.push((Instr::IfNzPtr(emit.len() + 1), elf)); // we dont know where to jump yet (default to here+1=nop)
             }
             Tile::IsNeg => {
                 next = elf.step_right();
-                emit.push(Instr::ArithC(crate::Op::Add, 1));
+                emit.push((Instr::ArithC(Op::Add, 1), elf));
                 bfs.push_back((elf.step_left(), Some(emit.len())));
-                emit.push(Instr::IfPosPtr(emit.len() + 1));
+                emit.push((Instr::IfPosPtr(emit.len() + 1), elf));
             }
             Tile::IsPos => {
                 next = elf.step_left();
                 bfs.push_back((elf.step_right(), Some(emit.len())));
-                emit.push(Instr::IfPosPtr(emit.len() + 1));
+                emit.push((Instr::IfPosPtr(emit.len() + 1), elf));
             }
             Tile::Instr(instr) => {
-                emit.push(*instr);
+                emit.push((*instr, elf));
                 if *instr == Instr::Hammock {
                     continue;
                 }
@@ -164,7 +164,19 @@ pub fn translate_plan(
         bfs.push_back((next, None));
     }
 
-    Some(emit)
+    Some(Room {
+        tiles: emit
+            .iter()
+            .enumerate()
+            .map(|(i, (_, elf))| {
+                let s = tiles[elf.x + elf.y * w]
+                    .clone()
+                    .convert(&|t: SourceStr| t.string.clone());
+                (i, (elf.x as i32, elf.y as i32, s))
+            })
+            .collect(),
+        elf_program: emit.iter().map(|(ins, _)| *ins).collect(),
+    })
 }
 
 impl<S> Tile<S> {
@@ -179,8 +191,8 @@ impl<S> Tile<S> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::parse::parse_plan;
     use crate::translate::{Loc, loc::LineMap};
-    use crate::{Op, parse::parse_plan};
 
     fn check_program(tiles: &str, expect_program: &[Instr]) {
         crate::logger::init(log::LevelFilter::Trace);
@@ -206,7 +218,7 @@ mod test {
         }
 
         assert!(errors.is_empty());
-        pretty_assertions::assert_eq!(expect_program, &program);
+        pretty_assertions::assert_eq!(expect_program, &program.elf_program);
     }
 
     use Instr::*;
@@ -215,7 +227,7 @@ mod test {
     fn translate_simple() {
         check_program(
             "
-            e> P1 .. mv
+            e> 01 .. mv
             Hm       m<
             ",
             &[Push(1), Hammock],
@@ -226,9 +238,9 @@ mod test {
     fn translate_ifz() {
         check_program(
             "
-               m> P2 mv
+               m> 02 mv
             e> ?=    m> Hm
-               m> P1 m^
+               m> 01 m^
             ",
             &[IfNzPtr(3), Push(1), Hammock, Push(2), JmpPtr(2)],
         );
@@ -238,9 +250,9 @@ mod test {
     fn translate_if_pos() {
         check_program(
             "
-               m> P2 mv
+               m> 02 mv
             e> ?>    m> Hm
-               m> P1 m^
+               m> 01 m^
             ",
             &[IfPosPtr(3), Push(2), Hammock, Push(1), JmpPtr(2)],
         );
@@ -250,9 +262,9 @@ mod test {
     fn translate_if_neg() {
         check_program(
             "
-               m> P2 mv
+               m> 02 mv
             e> ?<    m> Hm
-               m> P1 m^
+               m> 01 m^
             ",
             &[
                 ArithC(Op::Add, 1),
@@ -289,6 +301,5 @@ mod test {
                 JmpPtr(3),
             ],
         );
-        todo!("check correctness of expected program");
     }
 }

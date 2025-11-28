@@ -1,11 +1,10 @@
-pub mod parse;
-pub mod translate;
-pub mod logger;
 pub mod ir;
+pub mod logger;
+pub mod parse;
 pub mod runtime;
+pub mod translate;
 
 pub use parse::parse;
-
 
 #[cfg(test)]
 mod test {
@@ -14,11 +13,11 @@ mod test {
     const PRINT: Port = 123;
 
     #[test]
-    pub fn test1() {
+    pub fn fizzbuzz() {
         crate::logger::init(log::LevelFilter::Debug);
 
         #[rustfmt::skip]
-        let fizzbuzz = ElfProgram::new(vec![      // 100
+        let fizzbuzz = Room::test_elf(vec![      // 100
             Push(1),                        // 100 1
             Label("loop"),
                 Dup(1),                     // 100 1 100
@@ -37,7 +36,7 @@ mod test {
                 IfPos("no fizz"),           // 100 1 0
                     Push(-1),               // 100 3 0 -1
                     Out(PRINT),             // 100 3 0
-                    Erase(0), Push(1),      // 100 3 1
+                    Remove(0), Push(1),      // 100 3 1
                 Label("no fizz"),
 
                 Dup(1),                     // 100 1 0 1
@@ -46,7 +45,7 @@ mod test {
                 IfPos("no buzz"),           // 100 1 0
                     Push(-2),               // 100 5 0 -2
                     Out(PRINT),             // 100 5 0
-                    Erase(0), Push(1),      // 100 5 1
+                    Remove(0), Push(1),      // 100 5 1
                 Label("no buzz"),           // 100 1 0
 
                 IfPos("no number"),         // 100 1
@@ -62,7 +61,7 @@ mod test {
         ]);
 
         #[rustfmt::skip]
-        let print = ElfProgram::new(vec![ // num: =-1->Fizz, =-2->Buzz, else print num
+        let print = Room::test_elf(vec![ // num: =-1->Fizz, =-2->Buzz, else print num
             Label("start"),
             In(1),                          // num
 
@@ -112,7 +111,7 @@ mod test {
                 Dup(0),                         // -1 d_0 num/10 num/10
                 IfNz("prep_digits"),            // -1 d_0 num/10
 
-            Erase(0),                           // -1 d_0 .. d_k-1 d_k
+            Remove(0),                           // -1 d_0 .. d_k-1 d_k
             Label("print_digits"),
                 ArithC(Op::Add, '0' as Int),    // -1 d_0 .. d_k-1 d_k+'0'
                 Out(PRINT),                     // -1 d_0 .. d_k-1 -> prints d_k+'0'
@@ -124,16 +123,74 @@ mod test {
             Jmp("start"),
         ]);
 
-        let mut elf_fizzbuzz = Elf::new(fizzbuzz, vec![100]);
-        let mut elf_print = Elf::new(print, vec![]);
+        let santa = Vec::from([
+            SantaCode::SetupElf {
+                name: None,
+                room: 0,
+                stack: vec![100],
+            },
+            SantaCode::SetupElf {
+                name: None,
+                room: 1,
+                stack: vec![100],
+            },
+            SantaCode::Monitor {
+                port: (1, PRINT),
+                block_len: 2,
+            },
+            SantaCode::Receive(1, PRINT),
+            SantaCode::Deliver(3),
+        ]);
 
-        elf_fizzbuzz.connect(PRINT, (&mut elf_print, 1));
-        elf_print.monitor(PRINT, |_rt, n| {
-            print!("{}", n as u8 as char);
-        });
+        let unit = Unit {
+            rooms: vec![fizzbuzz, print],
+            santa,
+        };
 
-        let mut rt = Program::new(vec![elf_fizzbuzz, elf_print]);
+        let mut rt = Runtime::new(&unit);
+        rt.run(RunCommand::RunToEnd).unwrap();
+    }
+}
 
-        rt.run_loop().unwrap_or_else(|e| panic!("{e}"))
+use std::ops::Drop;
+
+pub struct DropGuard<F: FnMut() + 'static> {
+    action: Option<F>,
+}
+
+impl<F: FnMut() + 'static> DropGuard<F> {
+    /// Create a new DropGuard with a given closure
+    pub fn new(f: F) -> Self
+    {
+        DropGuard {
+            action: Some(f),
+        }
+    }
+
+    /// Create a new DropGuard with no closure
+    pub fn new_empty() -> Self {
+        DropGuard { action: None }
+    }
+
+    /// Reset the closure to a new one
+    pub fn reset<G>(mut self, g: G) -> DropGuard<G>
+    where
+        G: FnMut() + 'static,
+    {
+        self.clear();
+        DropGuard { action: Some(g) }
+    }
+
+    /// Clear the closure (nothing will run on drop)
+    pub fn clear(&mut self) {
+        self.action = None;
+    }
+}
+
+impl<F: FnMut() + 'static> Drop for DropGuard<F> {
+    fn drop(&mut self) {
+        if let Some(action) = self.action.as_mut() {
+            action();
+        }
     }
 }

@@ -2,8 +2,10 @@ use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     fmt,
     sync::Arc,
+    usize,
 };
 
+use crate::DropGuard;
 pub use crate::ir::*;
 pub use pipe::*;
 
@@ -23,6 +25,14 @@ pub struct Runtime<'u> {
     schedule: VecDeque<Turn>,
     /// Each monitor is a pair of (pipe, santa_handler_ptr)
     monitors: HashMap<(ElfId, Port), (InputPipe<Int>, SantaLine)>,
+    /// Output of the santa's deliver command
+    pub output: Out,
+}
+
+#[derive(Debug, Clone)]
+pub enum Out {
+    Std,
+    Buffer(String),
 }
 
 pub struct Elf {
@@ -40,15 +50,15 @@ pub struct Elf {
 #[derive(Debug, Clone, Copy)]
 pub enum RunCommand {
     /// Run to the end without stopping.
-    Run,
+    RunToEnd,
     /// Continue to next breakpoint.
     Continue,
     /// Step n steps.
     Step(usize),
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum RunResult {
+#[derive(Debug, Clone)]
+pub enum RunOk {
     /// Result of a Step command, says how many steps were taken.
     Stepped(usize),
     /// A breakpoint was hit.
@@ -56,19 +66,34 @@ pub enum RunResult {
     Done,
 }
 
-#[derive(Debug)]
-pub struct ElfError<'p> {
-    unit: &'p Unit,
-    code: Error,
+#[derive(Debug, Clone)]
+pub struct Error<'u> {
+    unit: &'u Unit,
     ip: usize,
+    room: Option<RoomId>,
+    culprit: Turn,
+    code: ECode,
     stack: Vec<Int>,
-    room_id: usize,
+}
+#[derive(Debug, Clone)]
+pub enum ECode {
+    InvalidIndex(usize),
+    InvalidInstr,
+    DivisionByZero,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Turn {
-    Santa,
+    Santa { ip: usize, until: usize },
     Elf(ElfId),
+}
+impl Turn {
+    fn unwrap_elfid(&self) -> usize {
+        match self {
+            Turn::Santa { .. } => panic!(),
+            Turn::Elf(id) => *id,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,7 +101,7 @@ enum Event {
     Yield,
     Dequeue,
     Breakpoint,
-    Write(Port, Int),
+    Write(Port),
 }
 
 #[rustfmt::skip]
@@ -116,40 +141,96 @@ impl<'u> Runtime<'u> {
             santa_result: vec![0; unit.santa.len()],
             next_elf_id: 0,
             elves: Default::default(),
-            schedule: VecDeque::from([Turn::Santa]),
+            schedule: VecDeque::from([Turn::Santa {
+                ip: 0,
+                until: unit.santa.len(),
+            }]),
             monitors: Default::default(),
+            output: Out::Std,
         }
     }
 
-    pub fn run(&mut self, cmd: RunCommand) -> RunResult {
-        while self.schedule.len() > 0 {
-            let next = self.schedule.pop_front().unwrap();
+    pub fn reset(&mut self) {
+        *self = Self::new(self.unit);
+    }
 
-            let evt = match next {
-                Turn::Santa => self.step_santa(),
-                Turn::Elf(id) => self.step_elf(id),
+    pub fn run(&mut self, cmd: RunCommand) -> Result<RunOk, Error> {
+        let mut last = None;
+
+        while let Some(mut next) = self.schedule.pop_front() {
+            if Some(next) != last {
+                log::debug!("Scheduling {next:?}");
+                last = Some(next);
+            }
+
+            let result = match &mut next {
+                Turn::Santa { ip, until } => self.step_santa(ip, until),
+                Turn::Elf(id) => self.step_elf(*id),
             };
 
-            match evt {
-                _ => {}
-            }
+            let evt = match result {
+                Ok(ev) => ev,
+                Err(ecode) => {
+                    let (ip, stack, room) = match next {
+                        Turn::Santa { ip, .. } => (ip, vec![], None),
+                        Turn::Elf(id) => {
+                            let elf = &self.elves[&id];
+                            (elf.ip, elf.stack.clone(), Some(elf.room))
+                        }
+                    };
+                    let error = Error {
+                        unit: self.unit,
+                        ip,
+                        room,
+                        culprit: next,
+                        code: ecode,
+                        stack,
+                    };
+                    self.reset();
+                    return Err(error);
+                }
+            };
 
+            log::trace!("evt={evt:?}");
+
+            // requeue
             match evt {
-                Some(Event::Yield) => self.schedule.push_back(next),
                 Some(Event::Dequeue) => {} // no requeue
+                Some(Event::Yield | Event::Write(_)) => self.schedule.push_back(next),
                 _ => self.schedule.push_front(next), // else repeat the same `next`
             }
+
+            // event side effect
+            match evt {
+                Some(Event::Breakpoint) => todo!("breakpoint"),
+                Some(Event::Write(port)) => {
+                    let key = (next.unwrap_elfid(), port);
+                    if let Some(mon) = self.monitors.get(&key) {
+                        self.santa_ip = mon.1 + 1;
+                        self.schedule.push_front(Turn::Santa {
+                            ip: mon.1 + 1,
+                            until: self.unit.santa[mon.1].unwrap_monitor().1,
+                        });
+                    }
+                }
+                _ => {}
+            }
         }
-        RunResult::Done
+        Ok(RunOk::Done)
     }
 
-    fn step_santa(&mut self) -> Option<Event> {
+    fn step_santa(&mut self, ip: &mut usize, until: &usize) -> Result<Option<Event>, ECode> {
         let Some(code) = self.unit.santa.get(self.santa_ip) else {
-            return Some(Event::Dequeue);
+            return Ok(Some(Event::Dequeue));
         };
 
         let mut next_ip = self.santa_ip + 1;
-        let _g = &self.santa_ip;
+        let (_g, ip) = (&self.santa_ip, self.santa_ip);
+
+        let trace_code: SantaCode = code.clone();
+        let trace = DropGuard::new(move || {
+            log::trace!("santa: {ip:4} | {trace_code:?}");
+        });
 
         let event = match code {
             SantaCode::SetupElf { name, room, stack } => {
@@ -167,6 +248,7 @@ impl<'u> Runtime<'u> {
                 };
                 self.next_elf_id += 1;
 
+                self.schedule.push_back(Turn::Elf(new.id));
                 self.santa_result[self.santa_ip] = new.id;
                 self.elves.insert(new.id, new);
                 None
@@ -220,7 +302,7 @@ impl<'u> Runtime<'u> {
                 let monitor = &self.monitors[&(elf_id, *port)];
 
                 match monitor.0.try_read() {
-                    Err(InputError::Closed) => Some(Event::Dequeue), // reading closed input semantically hangs forever
+                    Err(InputError::Closed) => Some(Event::Dequeue), // reading closed input hangs forever
                     Err(InputError::Empty) => {
                         next_ip = self.santa_ip; // will re-read in next cycle
                         Some(Event::Yield)
@@ -233,46 +315,121 @@ impl<'u> Runtime<'u> {
             }
             SantaCode::Send(_, _, _) => todo!(),
             SantaCode::SendConst(_, _, _) => todo!(),
+            SantaCode::Deliver(line) => {
+                let c = self.santa_result[*line] as u8 as char;
+                match &mut self.output {
+                    Out::Std => print!("{}", c),
+                    Out::Buffer(buf) => buf.push(c),
+                };
+                None
+            }
         };
+
+        let trace_code = code.clone();
+        let result = self.santa_result[self.santa_ip];
+        let trace = trace.reset(move || {
+            log::trace!("santa: {ip:4} | {:18} -> {result}", format!("{trace_code:?}"));
+        });
 
         _ = _g;
         self.santa_ip = next_ip;
-        event
+        Ok(event)
     }
-    fn step_elf(&mut self, id: ElfId) -> Option<Event> {}
 
-    pub fn run_loop(&mut self) -> Result<(), ElfError> {
-        while self.schedule.len() > 0 {
-            let elf_id = self.schedule.iter().next().unwrap();
-            let elf = self.elves.get_mut(&elf_id).unwrap();
+    fn step_elf(&mut self, id: ElfId) -> Result<Option<Event>, ECode> {
+        use Instr::*;
+        let unit = self.unit;
+        let Some(elf) = self.elves.get_mut(&id) else {
+            todo!("no elf {id}");
+        };
 
-            match elf.step() {
-                Ok(None) => {}
-                Ok(Some(Event::Write(port, value))) => {
-                    if let Some(monitor) = self.elves[&elf_id].outputs[&port].monitor.clone() {
-                        monitor(self, value);
-                    }
-                    let front = self.schedule.pop_front().unwrap();
-                    self.schedule.push_back(front);
+        let code_opt = unit.rooms[elf.room].elf_program.get(elf.ip);
+        let code = code_opt.cloned().unwrap_or(Hammock);
+
+        let mut event = None;
+        let mut next_ip = elf.ip + 1;
+        let _g = &elf.ip; // you should write to next_instr instead
+
+        match code {
+            Nop | Label(_) => {}
+            Push(value) => elf.stack.push(value),
+            Dup(i) => elf.stack.push(elf.top_val(i)?),
+            Remove(i) => {
+                elf.stack.remove(elf.top_idx(i)?);
+            }
+            Tuck(i) => {
+                let index = elf.top_idx(i)?;
+                let top = elf.stack.pop().unwrap();
+                elf.stack.insert(index, top);
+            }
+            Swap(i) => {
+                let top_i = elf.top_idx(0)?;
+                let index = elf.top_idx(i)?;
+                elf.stack.swap(top_i, index);
+            }
+            Jmp(_) | IfPos(_) | IfNz(_) => return Err(ECode::InvalidInstr),
+            JmpPtr(target) => next_ip = target,
+            IfPosPtr(target) => {
+                if elf.top_val(0)? > 0 {
+                    next_ip = target
                 }
-                Ok(Some(Event::Yield)) => {
-                    let front = self.schedule.pop_front().unwrap();
-                    self.schedule.push_back(front);
+                elf.stack.pop();
+            }
+            IfNzPtr(target) => {
+                if elf.top_val(0)? != 0 {
+                    next_ip = target
                 }
-                Err(e) => {
-                    return Err(ElfError {
-                        code: e,
-                        ip: elf.instr,
-                        stack: elf.stack.clone(),
-                        room: elf.room.clone(),
-                    });
+                elf.stack.pop();
+            }
+            Arith(op) => {
+                let result = op.invoke(elf.top_val(1)?, elf.top_val(0)?)?;
+                elf.stack.pop();
+                elf.stack.pop();
+                elf.stack.push(result);
+            }
+            ArithC(op, c) => {
+                let result = op.invoke(elf.top_val(0)?, c)?;
+                elf.stack.pop();
+                elf.stack.push(result);
+            }
+            In(port) => match elf.inputs.get_mut(&port).map(|p| p.try_read()) {
+                Some(Ok(value)) => elf.stack.push(value),
+                Some(Err(InputError::Empty)) => {
+                    next_ip = elf.ip; // wait here for input
+                    event = Some(Event::Yield);
+                }
+                None | Some(Err(InputError::Closed)) => {
+                    elf.finished = true;
+                }
+            },
+            Out(port) => {
+                if let Some(output) = elf.outputs.get(&port) {
+                    let top = elf.top_val(0)?;
+                    output.write(top);
+                    elf.stack.pop();
+                    event = Some(Event::Write(port));
                 }
             }
+            Hammock => {
+                elf.finished = true;
+            }
+        };
 
-            self.elves.retain(|_, e| e.finished == false);
+        if elf.finished {
+            event = Some(Event::Dequeue);
         }
 
-        Ok(())
+        log::trace!(
+            "elf {} > {:>3} | {:<25}{:?}",
+            elf.name,
+            elf.ip,
+            format!("{:?}", code),
+            &elf.stack[elf.stack.len().saturating_sub(10)..]
+        );
+
+        _ = _g;
+        elf.ip = next_ip;
+        Ok(event)
     }
 }
 
@@ -289,127 +446,51 @@ impl Elf {
             .or_insert_with(|| InputPipe::new_connected(connect))
     }
 
-    fn step(&mut self, unit: &Unit) -> Result<Option<Event>, Error> {
-        use Instr::*;
-        if self.finished {
-            return Ok(None);
+    pub fn top_idx(&self, from_top: usize) -> Result<usize, ECode> {
+        let stack_len = self.stack.len();
+        match from_top < stack_len {
+            true => Ok(stack_len - from_top - 1),
+            false => Err(ECode::InvalidIndex(from_top)),
         }
-
-        let code_opt = self.room.program.get(self.instr).cloned();
-        let code = code_opt.unwrap_or(Hammock);
-
-        let mut event = None;
-        let mut next_instr = self.instr + 1;
-        let guard_instr = &self.instr; // you should write to next_instr instead
-
-        match code {
-            Nop | Label(_) => {}
-            Push(value) => self.init_stack.push(value),
-            Dup(i) => self.init_stack.push(self.top_val(i)?),
-            Erase(i) => {
-                self.init_stack.remove(self.top_idx(i)?);
-            }
-            Tuck(i) => {
-                let index = self.top_idx(i)?;
-                let top = self.init_stack.pop().unwrap();
-                self.init_stack.insert(index, top);
-            }
-            Swap(i) => {
-                let top_i = self.top_idx(0)?;
-                let index = self.top_idx(i)?;
-                self.init_stack.swap(top_i, index);
-            }
-            Jmp(_) | IfPos(_) | IfNz(_) => return Err(Error::InvalidInstr),
-            JmpPtr(target) => next_instr = target,
-            IfPosPtr(target) => {
-                if self.top_val(0)? > 0 {
-                    next_instr = target
-                }
-                self.init_stack.pop();
-            }
-            IfNzPtr(target) => {
-                if self.top_val(0)? != 0 {
-                    next_instr = target
-                }
-                self.init_stack.pop();
-            }
-            Arith(op) => {
-                let result = op.invoke(self.top_val(1)?, self.top_val(0)?)?;
-                self.init_stack.pop();
-                self.init_stack.pop();
-                self.init_stack.push(result);
-            }
-            ArithC(op, c) => {
-                let result = op.invoke(self.top_val(0)?, c)?;
-                self.init_stack.pop();
-                self.init_stack.push(result);
-            }
-            In(port) => match self.inputs.get_mut(&port).map(|p| p.try_read()) {
-                Some(Ok(value)) => self.init_stack.push(value),
-                Some(Err(InputError::Empty)) => {
-                    next_instr = self.instr; // wait here for input
-                    event = Some(Event::Yield);
-                }
-                None | Some(Err(InputError::Closed)) => {
-                    self.finished = true;
-                }
-            },
-            Out(port) => {
-                if let Some(output) = self.outputs.get(&port) {
-                    let top = self.top_val(0)?;
-                    output.pipe.write(top);
-                    self.init_stack.pop();
-                    event = Some(Event::Write(port, top));
-                }
-            }
-            Hammock => {
-                self.finished = true;
-            }
-        };
-
-        log::trace!(
-            "elf {} > {:>3} | {:<25}{:?}",
-            self.name.unwrap_or("Unk?"),
-            self.instr,
-            format!("{:?}", code),
-            &self.init_stack[self.init_stack.len().saturating_sub(10)..]
-        );
-
-        _ = guard_instr;
-        self.instr = next_instr;
-        Ok(event)
+    }
+    pub fn top_val(&self, from_top: usize) -> Result<Int, ECode> {
+        Ok(self.stack[self.top_idx(from_top)?])
     }
 }
 
 impl Op {
-    fn invoke(&self, a: i64, b: i64) -> Result<Int, Error> {
+    fn invoke(&self, a: i64, b: i64) -> Result<Int, ECode> {
         return Ok(match self {
             Op::Add => a + b,
             Op::Sub => a - b,
             Op::Mul => a * b,
-            Op::Div if b == 0 => return Err(Error::DivisionByZero),
+            Op::Div if b == 0 => return Err(ECode::DivisionByZero),
             Op::Div => a / b,
             Op::Mod => a % b,
         });
     }
 }
 
-impl fmt::Display for ElfError {
+impl<'u> fmt::Display for Error<'u> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Elf encountered a problem and doesn't know what to do: ")?;
         match self.code {
-            Error::InvalidIndex(i) => writeln!(f, "invalid index {i}"),
-            Error::InvalidInstr => writeln!(f, "invalid instruction"),
-            Error::DivisionByZero => writeln!(f, "division by zero"),
+            ECode::InvalidIndex(i) => writeln!(f, "invalid index {i}"),
+            ECode::InvalidInstr => writeln!(f, "invalid instruction"),
+            ECode::DivisionByZero => writeln!(f, "division by zero"),
         }?;
 
+        if let Some(room) = self.room.map(|i| &self.unit.rooms[i]) {
+            let (x, y, _tile) = room.tiles[&self.ip].clone();
+            write!(f, "  pos=({x},{y})")?;
+        }
         writeln!(f, "  stack: {:?}", self.stack)?;
 
-        let program_peek = self.room.elf_program.iter().enumerate();
-        for (i, instr) in program_peek.skip(self.ip.saturating_sub(2)).take(5) {
-            let caret = if i == self.ip { '>' } else { ' ' };
-            writeln!(f, "{:>5} | {instr:?}", format!("{caret} {i}"))?;
-        }
+        // let program_peek = self.room.elf_program.iter().enumerate();
+        // for (i, instr) in program_peek.skip(self.ip.saturating_sub(2)).take(5) {
+        //     let caret = if i == self.ip { '>' } else { ' ' };
+        //     writeln!(f, "{:>5} | {instr:?}", format!("{caret} {i}"))?;
+        // }
 
         Ok(())
     }

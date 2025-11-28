@@ -52,11 +52,13 @@ peg::parser! { grammar santasm() for str {
         = ("  " / "..") { Tile::Empty }
         / "m" d:dir() { Tile::Move(d) }
         / "e" d:dir() { Tile::Elf(d) }
-        / "P" n:tile_param() { Tile::Instr(Instr::Push(n)) }
+        / "C" c:tile_ch() { Tile::Instr(Instr::Push(c as Int)) }
         / d1:digit() d0:digit() { Tile::Instr(Instr::Push(d1 as Int * 10 + d0 as Int)) }
         / "D" d:digit() { Tile::Instr(Instr::Dup(d)) }
-        / "E" d:digit() { Tile::Instr(Instr::Erase(d)) }
+        / "R" d:digit() { Tile::Instr(Instr::Remove(d)) }
         / "S" d:digit() { Tile::Instr(Instr::Swap(d)) }
+        / "I" d:tile_param() { Tile::Instr(Instr::In(d as u16)) }
+        / "O" d:tile_param() { Tile::Instr(Instr::Out(d as u16)) }
         / "Hm" { Tile::Instr(Instr::Hammock) }
         / "?=" { Tile::IsZero }
         / "?>" { Tile::IsPos }
@@ -104,13 +106,15 @@ peg::parser! { grammar santasm() for str {
             { ToDo::Receive { vars: vs, src } }
         / word("send") vs:list(<val_expr()>) dst:(word("to") p:helper_port() {p})?
             { ToDo::Send { values: vs, dst } }
+        / word("deliver") e:val_expr() { ToDo::Deliver { e } }
+
 
     rule helper_type() -> HelperType
         = word("elf") { HelperType::Elf }
         // word("raindeer") { HelperType::Raindeer }
 
     rule helper_port() -> (&'input str, char)
-        = name:ident() "." _ port:tile_ch() _ { (name, port) }
+        = name:ident() "." _ port:tile_param() _ { (name, port as u8 as char) }
 
     rule val_expr() -> Expr<&'input str>
         = v:numInt() { Expr::Number(v) }
@@ -149,7 +153,6 @@ peg::parser! { grammar santasm() for str {
         / s:$(quiet!{['\t']+}) ![' '|'\t'] { ('\t', s.len()) }
         / expected!("uniform indentation")
 
-    rule todo() = { todo!() }
     rule NL() = "\n" / "\r\n"
 
     rule __ -> usize = s:$(quiet!{[' ' | '\r' | '\x0b' | '\x0c' | '\t']*}) { s.len() }
@@ -286,7 +289,7 @@ mod test {
                 workshop test:
                     floorplan:
                     e> .. mv
-                       .. P0
+                       .. 00
                     ;
                 ;
             ",
