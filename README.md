@@ -1,6 +1,6 @@
 # SantAS
 
-todo for tom :P
+(todo for tom: write short description :P)
 
 ## Floorplan blocks
 Workshops are described by floorplan blocks. Inside a floorplan, every
