@@ -42,7 +42,7 @@ The elf movement goes like this:
 
 ---
 
-## 🧩 Instruction tiles (quick reference)
+## Instruction reference
 
 A tile always consist of two printable characters. Terminology:
 - *Push* - elf puts a blank sheet of paper on top of their stack and writes something on it.
@@ -59,8 +59,8 @@ A tile always consist of two printable characters. Terminology:
 | `R<n>` | Remove sheet at depth `n` (0 = top). | `R1`: `a b c` → `a c` |
 | `S<n>` | Swap sheet at depth `n` with sheet on top. | `S1`: `a b c` → `a c b` |
 | `Hm` | Hammock. Elf falls asleep here, to wait for the next christmas. | -- |
-| `?=` | Elf pops `n` from the stack, goes right if `n` = 0, left otherwise. | `a b` → `a` |
-| `?>` | Elf pops `n` from the stack, goes right if `n` > 0, left otherwise.  | `a b` → `a` |
-| `?<` | Elf pops `n` from the stack, goes right if `n` < 0, left otherwise.  | `a b` → `a` |
-| `+_`, `-_`, `*_`, `/_`, `%_` | Arithmetic on top two items; consumes both | `a b` → `(a+b)` for `+_` |
-| `+<n>`, `-<n>`, `*<n>`, `/ <n>`, `%<n>` | Arithmetic with constant `<n>`; consumes top | `a b` → `a (b+<n>)` for `+<n>` |
+| `?=` | Pop `n` from the stack, go right if `n` = 0, left otherwise. | `a b` → `a` |
+| `?>` | Pop `n` from the stack, go right if `n` > 0, left otherwise.  | `a b` → `a` |
+| `?<` | Pop `n` from the stack, go right if `n` < 0, left otherwise.  | `a b` → `a` |
+| `+_`, `-_`, `*_`, `/_`, `%_` | Arithmetic on top two items; consumes both | `+_`: `a b` → `(a+b)` |
+| `+<n>`, `-<n>`, `*<n>`, `/ <n>`, `%<n>` | Arithmetic with constant `<n>`; consumes top | `+<n>`: `a b` → `a (b+<n>)` |
