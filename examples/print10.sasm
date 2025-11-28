@@ -1,0 +1,19 @@
+
+workshop print:
+    floorplan:
+                                            mv             m<
+                                            m> 48 +_ O1 D0 ?<
+        e> 00 -1 S1 m> D0 10 %_ S1 10 /_ D0 ?>             Hm
+                    m^                      m<
+
+
+    ;
+;
+
+Santa will:
+    setup print for elf Printer (12345678)
+    monitor Printer.1:
+        receive x
+        deliver x
+    ;
+;
