@@ -71,9 +71,12 @@ any loops or branches.
 ### Elves
 
 Each elf has their own workshop; they carry a stack of paper and a pencil, with
-which they can perform some arithmetic.
+which they can perform some arithmetic. They can operate on the top 10 sheets.
 
-The elf movement goes like this:
+They can also write up to 10 numbers on their *sleeve*. Using instructions
+`R0`..`R9` and `W0`..`W9` they can read and write to/from one of the 10 slots.
+
+The elf movement throughout the workshop goes like this:
 
 - Elves start on an `e_` tile (their spawn point and facing direction).
 - They walk in a *straight line*, executing instructions in the order they step
@@ -90,8 +93,10 @@ The elf movement goes like this:
 ### Ports and pipes
 
 Workshops can communicate through pipes. Each elf in a workshop has their own set
-of input and output *ports*, and santa can connect them to other workshop via the
-`setup .. -> ..` ToDo.
+of input and output *ports*, and santa can connect them to other workshop via a *pipe*
+by the `setup .. -> ..` ToDo.
+
+See the [stream_add example](./examples/stream_add.sasm) file pls.
 
 ---
 
@@ -113,6 +118,8 @@ A tile always consist of two printable characters. Terminology:
 | `S<n>` | Swap sheet at depth `n` with sheet on top. | `S1`: `a b c` → `a c b` |
 | `I<c>` | Wait for incoming sheet `n` from port `c` and put it on top. | `I1`: `a b` → `a b n` |
 | `O<c>` | Pop a number and send it down port `c`. | `Ox`: `a b n` → `a b` |
+| `W<n>` | Pop a number and write it on the sleeve slot `n`. | TODO |
+| `R<n>` | Read sleeve slot `n` and push it on the stack. | TODO |
 | `Hm` | Hammock. Elf falls asleep here, to wait for the next christmas. | -- |
 | `?=` | Pop `n` from the stack, go right if `n` = 0, left otherwise. | `a b` → `a` |
 | `?>` | Pop `n` from the stack, go right if `n` > 0, left otherwise.  | `a b` → `a` |

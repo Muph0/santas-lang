@@ -59,6 +59,8 @@ peg::parser! { grammar santasm() for str {
         / "S" d:digit() { Tile::Instr(Instr::Swap(d)) }
         / "I" d:tile_param() { Tile::Instr(Instr::In(d as u16)) }
         / "O" d:tile_param() { Tile::Instr(Instr::Out(d as u16)) }
+        / "R" d:digit() { Tile::Instr(Instr::Read(d as u8)) }
+        / "W" d:digit() { Tile::Instr(Instr::Write(d as u8)) }
         / "Hm" { Tile::Instr(Instr::Hammock) }
         / "?=" { Tile::IsZero }
         / "?>" { Tile::IsPos }

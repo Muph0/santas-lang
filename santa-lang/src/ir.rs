@@ -76,6 +76,8 @@ pub enum Instr {
     Arith(Op),
     ArithC(Op, Int),
     StackLen,
+    Read(u8),  // read sleeve slot, push on top
+    Write(u8), // write to sleeve slot, consuming top
     In(Port),
     Out(Port),
     Hammock,

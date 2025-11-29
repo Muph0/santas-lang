@@ -42,6 +42,7 @@ pub struct Elf {
     id: ElfId,
     name: String,
     stack: Vec<Int>,
+    sleeve: Box<[Int; 10]>,
     inputs: HashMap<Port, InputPipe<Int>>,
     outputs: HashMap<Port, OutputPipe<Int>>,
     finished: bool,
@@ -242,6 +243,7 @@ impl<'u> Runtime<'u> {
                         ELF_NAMES[self.next_elf_id % ELF_NAMES.len()].to_string()
                     }),
                     stack: stack.clone(),
+                    sleeve: Box::new([0; 10]),
                     inputs: Default::default(),
                     outputs: Default::default(),
                     finished: false,
@@ -415,6 +417,13 @@ impl<'u> Runtime<'u> {
                     event = Some(Event::Write(port));
                 }
             }
+            Read(slot) => {
+                elf.stack.push(elf.sleeve[slot as usize]);
+            },
+            Write(slot) => {
+                elf.sleeve[slot as usize] = elf.top_val(0)?;
+                elf.stack.pop();
+            },
             StackLen => {
                 elf.stack.push(elf.stack.len() as Int);
             }
