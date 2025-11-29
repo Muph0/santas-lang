@@ -118,7 +118,10 @@ pub fn translate_plan(
         if let Some(from) = from {
             let emit_len = emit.len();
             match &mut emit[from].0 {
-                Instr::JmpPtr(target) | Instr::IfPosPtr(target) | Instr::IfNzPtr(target) => {
+                Instr::JmpPtr(target)
+                | Instr::IfPosPtr(target)
+                | Instr::IfNzPtr(target)
+                | Instr::IfEmptyPtr(target) => {
                     *target = emit_len;
                 }
                 _ => panic!("bug: jumped from non-jump instr during translation"),
@@ -149,6 +152,11 @@ pub fn translate_plan(
                 next = elf.step_left();
                 bfs.push_back((elf.step_right(), Some(emit.len())));
                 emit.push((Instr::IfPosPtr(emit.len() + 1), elf));
+            }
+            Tile::IsEmpty => {
+                next = elf.step_left();
+                bfs.push_back((elf.step_right(), Some(emit.len())));
+                emit.push((Instr::IfEmptyPtr(emit.len() + 1), elf));
             }
             Tile::Instr(instr) => {
                 emit.push((*instr, elf));

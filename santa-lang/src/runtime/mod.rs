@@ -354,7 +354,7 @@ impl<'u> Runtime<'u> {
             Nop | Label(_) => {}
             Push(value) => elf.stack.push(value),
             Dup(i) => elf.stack.push(elf.top_val(i)?),
-            Remove(i) => {
+            Erase(i) => {
                 elf.stack.remove(elf.top_idx(i)?);
             }
             Tuck(i) => {
@@ -381,6 +381,11 @@ impl<'u> Runtime<'u> {
                 }
                 elf.stack.pop();
             }
+            IfEmptyPtr(target) => {
+                if elf.stack.is_empty() {
+                    next_ip = target;
+                }
+            },
             Arith(op) => {
                 let result = op.invoke(elf.top_val(1)?, elf.top_val(0)?)?;
                 elf.stack.pop();
@@ -409,6 +414,9 @@ impl<'u> Runtime<'u> {
                     elf.stack.pop();
                     event = Some(Event::Write(port));
                 }
+            }
+            StackLen => {
+                elf.stack.push(elf.stack.len() as Int);
             }
             Hammock => {
                 elf.finished = true;

@@ -46,7 +46,7 @@ peg::parser! { grammar santasm() for str {
         = (__ NL()) r1:plan_row(None) rs:plan_row(Some(&r1))* _ { ShopBlock::make_plan(r1, rs) }
 
     rule plan_row(first: Option<&PlanRow<&'input str>>) -> PlanRow<&'input str>
-        = (__ NL())* i:indent_any() tiles:(plan_tile() ** " ") NL() {? PlanRow { indent: i, tiles }.matches(first) }
+        = i:indent_any() tiles:(plan_tile() ** " ") (__ NL())+ {? PlanRow { indent: i, tiles }.matches(first) }
 
     rule plan_tile() -> Tile<&'input str>
         = ("  " / "..") { Tile::Empty }
@@ -55,7 +55,7 @@ peg::parser! { grammar santasm() for str {
         / "C" c:tile_ch() { Tile::Instr(Instr::Push(c as Int)) }
         / d1:digit() d0:digit() { Tile::Instr(Instr::Push(d1 as Int * 10 + d0 as Int)) }
         / "D" d:digit() { Tile::Instr(Instr::Dup(d)) }
-        / "R" d:digit() { Tile::Instr(Instr::Remove(d)) }
+        / "E" d:digit() { Tile::Instr(Instr::Erase(d)) }
         / "S" d:digit() { Tile::Instr(Instr::Swap(d)) }
         / "I" d:tile_param() { Tile::Instr(Instr::In(d as u16)) }
         / "O" d:tile_param() { Tile::Instr(Instr::Out(d as u16)) }
@@ -63,6 +63,8 @@ peg::parser! { grammar santasm() for str {
         / "?=" { Tile::IsZero }
         / "?>" { Tile::IsPos }
         / "?<" { Tile::IsNeg }
+        / "?s" { Tile::IsEmpty }
+        / "!s" { Tile::Instr(Instr::StackLen) }
         / op:arith_op() "_" { Tile::Instr(Instr::Arith(op)) }
         / op:arith_op() d:digit() { Tile::Instr(Instr::ArithC(op, d as Int)) }
         // s:$(tile_ch()*<2>) { Tile::Unknown(s) }
@@ -128,7 +130,9 @@ peg::parser! { grammar santasm() for str {
         = i:alnum() {? if i == expect { Ok(i) } else { Err(expect)} }
 
     rule num128() -> i128 = _ n:$(['0'..='9']+) _ {? n.parse().or(Err("i128")) }
-    rule numInt() -> Int = _ n:$(['0'..='9']+) _ {? n.parse().or(Err("Int")) }
+    rule numInt() -> Int
+        = _ n:$(['0'..='9']+) _ {? n.parse().or(Err("Int")) }
+        / _ "-" _ n:numInt() { -n }
 
     rule ident() -> &'input str
         = alnum()
@@ -155,8 +159,8 @@ peg::parser! { grammar santasm() for str {
 
     rule NL() = "\n" / "\r\n"
 
-    rule __ -> usize = s:$(quiet!{[' ' | '\r' | '\x0b' | '\x0c' | '\t']*}) { s.len() }
-    rule _ -> usize = s:$(quiet!{[' ' | '\r' | '\x0b' | '\x0c' | '\t' | '\n']*}) { s.len() }
+    rule __ -> usize = s:$(quiet!{[' ' | '\r' | '\x0b' | '\x0c' | '\t']* ("#" [^'\n']*)? }) { s.len() }
+    rule _ -> usize = s:$( __ ** NL() ) { s.len() }
 }}
 
 enum HelperType {
@@ -406,7 +410,7 @@ mod test {
                 },
                 ToDo::Connect {
                     src: ("Josh".into(), 'a'),
-                    dst: ("Bob".into(), '1'),
+                    dst: ("Bob".into(), 1 as char),
                 },
                 ToDo::Monitor {
                     target: ("Josh".into(), 'b'),
@@ -456,5 +460,44 @@ mod test {
             &mut u,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn parse_comment() {
+        let shop = santasm::shop(
+            "
+                workshop test: # hello
+                    floorplan:  # test
+                    e> .. mv   # test
+                       .. 00   # test
+                    ;
+                ;
+            ",
+        );
+
+        let shop = match shop {
+            Err(e) => panic!("{e}"),
+            Ok(s) => s,
+        };
+
+        let expected = Shop {
+            name: "test",
+            blocks: vec![ShopBlock::Plan {
+                width: 4,
+                height: 2,
+                map: vec![
+                    Tile::Elf(Direction::Right),
+                    Tile::Empty,
+                    Tile::Move(Direction::Down),
+                    Tile::Empty,
+                    Tile::Empty,
+                    Tile::Empty,
+                    Tile::Instr(runtime::Instr::Push(0)),
+                    Tile::Empty,
+                ],
+            }],
+        };
+
+        pretty_assertions::assert_eq!(expected, shop);
     }
 }

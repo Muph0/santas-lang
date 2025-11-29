@@ -13,7 +13,7 @@ workshop print:
 Santa will:
     setup print for elf Printer (12345678)
     monitor Printer.1:
-        receive x
+        receive x from Printer.1
         deliver x
     ;
 ;

@@ -47,6 +47,12 @@ impl SantaCode {
     }
 }
 
+pub struct PortIdent {
+    elf: SantaLine,
+    /// If `indirect`, port is
+    port: SantaLine,
+}
+
 #[derive(Debug)]
 pub struct Room {
     /// Mapping: ip -> x,y,tile
@@ -60,14 +66,16 @@ pub enum Instr {
     Nop,
     Push(Int),
     Dup(usize),        // push n-th from top to the top
-    Remove(usize),      // remove n-th from top
+    Erase(usize),      // remove n-th from top
     Tuck(usize),       // insert top before n-th from top
     Swap(usize),       // swap top with n-th from top
     JmpPtr(ElfLine),   // jump to usize
     IfPosPtr(ElfLine), // if top>0, jump to usize
     IfNzPtr(ElfLine),  // if top!=0, jump to usize
+    IfEmptyPtr(ElfLine), // if stack is empty, jump
     Arith(Op),
     ArithC(Op, Int),
+    StackLen,
     In(Port),
     Out(Port),
     Hammock,

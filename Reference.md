@@ -1,13 +1,14 @@
 # Language reference
 
-The program module consists of multiple files. The module may contain multiple
+The program source consists of one or more files. The translation treats them as
+if they were concatenated into one string. Altogether, the module may contain multiple
 workshop blocks and one Santa block.
 
-    workshop MyWorkshop1: ;
-    workshop MyWorkshop2: ;
+    workshop MyWorkshop1: ... ;
+    workshop MyWorkshop2: ... ;
     ...
 
-    Santa will: ;
+    Santa will: ... ;
 
 You describe the workshop layout and then tell Santa what to do.
 
@@ -49,9 +50,10 @@ The santa block may contain one or more `ToDo`s.
   - Santa connects a pipe to the given port and when a sheet of paper arrives through
 this pipe, he executes the ToDo list in this monitor block.
 
-- `receive` *var* ( `from` *elf* `.` *port* )
+- `receive` *var* ( `from` *elf* `.` *port* )?
   - Receive a sheet from the monitored port. You can later refer to it by chosen
   identifier *var*.
+  - The `from` part is optional, defaults to the monitored port if left out.
 
 - `send` *var* `to`
 
@@ -85,9 +87,11 @@ The elf movement goes like this:
 
 - Unless redirected, they march endlessly forward, faithfully carrying out Santa’s plan.
 
-### Pipes
+### Ports and pipes
 
-TODO
+Workshops can communicate through pipes. Each elf in a workshop has their own set
+of input and output *ports*, and santa can connect them to other workshop via the
+`setup .. -> ..` ToDo.
 
 ---
 
@@ -99,19 +103,21 @@ A tile always consist of two printable characters. Terminology:
 
 | Characters | Meaning | Stack (before → after) |
 |-----------|---------|------------------------|
-| `..`, `␣␣` | Empty tile | -- |
+| `..`, `  ` | Empty tile | -- |
 | `m^`, `mv`, `m<`, `m>` | Move elf (set direction up, down, left, right) | -- |
 | `e^`, `ev`, `e<`, `e>` | Elf spawn point (with direction). | -- |
 | `C<c>` | Push character `c`. | `a b` → `a b <c>` |
 | `<d1><d0>` | Push two‑digit number `d1d0`. | `a b` → `a b <d1d0>` |
 | `D<n>` | Duplicate sheet at depth `n` (0 = top) and place on top. | `D1`: `a b c` → `a b c b` |
-| `R<n>` | Remove sheet at depth `n` (0 = top). | `R1`: `a b c` → `a c` |
+| `E<n>` | Remove sheet at depth `n` (0 = top). | `E1`: `a b c` → `a c` |
 | `S<n>` | Swap sheet at depth `n` with sheet on top. | `S1`: `a b c` → `a c b` |
 | `I<c>` | Wait for incoming sheet `n` from port `c` and put it on top. | `I1`: `a b` → `a b n` |
-| `O<c>` | Pop `n` and send it down port `c`. | `Ox`: `a b n` → `a b` |
+| `O<c>` | Pop a number and send it down port `c`. | `Ox`: `a b n` → `a b` |
 | `Hm` | Hammock. Elf falls asleep here, to wait for the next christmas. | -- |
 | `?=` | Pop `n` from the stack, go right if `n` = 0, left otherwise. | `a b` → `a` |
 | `?>` | Pop `n` from the stack, go right if `n` > 0, left otherwise.  | `a b` → `a` |
 | `?<` | Pop `n` from the stack, go right if `n` < 0, left otherwise.  | `a b` → `a` |
+| `?s` | Is stack empty? | TODO |
+| `!s` | Push lenght of stack on top. | TODO |
 | `+_`, `-_`, `*_`, `/_`, `%_` | Arithmetic on top two items; consumes both | `+_`: `a b` → `(a+b)` |
 | `+<n>`, `-<n>`, `*<n>`, `/ <n>`, `%<n>` | Arithmetic with constant `<n>`; consumes top | `+<n>`: `a b` → `a (b+<n>)` |

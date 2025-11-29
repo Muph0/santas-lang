@@ -15,6 +15,7 @@ mod test {
     #[test]
     pub fn fizzbuzz() {
         crate::logger::init(log::LevelFilter::Debug);
+        todo!("hangs");
 
         #[rustfmt::skip]
         let fizzbuzz = Room::test_elf(vec![      // 100
@@ -36,7 +37,7 @@ mod test {
                 IfPos("no fizz"),           // 100 1 0
                     Push(-1),               // 100 3 0 -1
                     Out(PRINT),             // 100 3 0
-                    Remove(0), Push(1),      // 100 3 1
+                    Erase(0), Push(1),      // 100 3 1
                 Label("no fizz"),
 
                 Dup(1),                     // 100 1 0 1
@@ -45,7 +46,7 @@ mod test {
                 IfPos("no buzz"),           // 100 1 0
                     Push(-2),               // 100 5 0 -2
                     Out(PRINT),             // 100 5 0
-                    Remove(0), Push(1),      // 100 5 1
+                    Erase(0), Push(1),      // 100 5 1
                 Label("no buzz"),           // 100 1 0
 
                 IfPos("no number"),         // 100 1
@@ -111,7 +112,7 @@ mod test {
                 Dup(0),                         // -1 d_0 num/10 num/10
                 IfNz("prep_digits"),            // -1 d_0 num/10
 
-            Remove(0),                           // -1 d_0 .. d_k-1 d_k
+            Erase(0),                           // -1 d_0 .. d_k-1 d_k
             Label("print_digits"),
                 ArithC(Op::Add, '0' as Int),    // -1 d_0 .. d_k-1 d_k+'0'
                 Out(PRINT),                     // -1 d_0 .. d_k-1 -> prints d_k+'0'

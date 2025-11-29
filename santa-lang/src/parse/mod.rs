@@ -55,6 +55,8 @@ pub enum Tile<S> {
     IsZero,
     IsNeg,
     IsPos,
+    /// Is the stack empty?
+    IsEmpty,
     Instr(runtime::Instr),
     Unknown(S),
 }
@@ -175,6 +177,7 @@ impl<S> Tile<S> {
             IsNeg => IsNeg,
             IsPos => IsPos,
             IsZero => IsZero,
+            IsEmpty => IsEmpty,
             Instr(i) => Instr(i),
             Unknown(s) => Unknown(f(s)),
         }
