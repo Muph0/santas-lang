@@ -102,7 +102,7 @@ peg::parser! { grammar santasm() for str {
                 HelperType::Elf => ToDo::SetupElf { name, stack, shop },
                 HelperType::Raindeer => todo!("raindeer"),
             } }
-        / word("setup") src:helper_port() "->" dst:helper_port()
+        / word("setup") src:connection("STDIN") "->" dst:connection("STDOUT")
             { ToDo::Connect { src, dst } }
         / word("monitor") target:helper_port() ":" _ ts:todo_item()* _ ";" _
             { ToDo::Monitor { target, todos: ts } }
@@ -117,6 +117,11 @@ peg::parser! { grammar santasm() for str {
         = word("elf") { HelperType::Elf }
         // word("raindeer") { HelperType::Raindeer }
 
+    rule connection(std: &'static str) -> Connection<&'input str>
+        = word(std) { Connection::Std }
+        / word("FILE") "(" name:strlit() ")" _ { Connection::File(name) }
+        / p:helper_port() { Connection::Port(p.0, p.1) }
+
     rule helper_port() -> (&'input str, char)
         = name:ident() "." _ port:tile_param() _ { (name, port as u8 as char) }
 
@@ -130,6 +135,9 @@ peg::parser! { grammar santasm() for str {
 
     rule word(expect: &'static str) -> &'input str
         = i:alnum() {? if i == expect { Ok(i) } else { Err(expect)} }
+
+    rule strlit() -> &'input str
+        = _ "\"" s:$([^'"']*) "\"" _ { s }
 
     rule num128() -> i128 = _ n:$(['0'..='9']+) _ {? n.parse().or(Err("i128")) }
     rule numInt() -> Int
@@ -411,8 +419,8 @@ mod test {
                     stack: vec![],
                 },
                 ToDo::Connect {
-                    src: ("Josh".into(), 'a'),
-                    dst: ("Bob".into(), 1 as char),
+                    src: Connection::Port("Josh".into(), 'a'),
+                    dst: Connection::Port("Bob".into(), 1 as char),
                 },
                 ToDo::Monitor {
                     target: ("Josh".into(), 'b'),

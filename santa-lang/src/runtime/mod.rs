@@ -1,8 +1,6 @@
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
-    fmt,
-    sync::Arc,
-    usize,
+    collections::{HashMap, VecDeque},
+    fmt, fs, io, usize,
 };
 
 use crate::DropGuard;
@@ -11,6 +9,7 @@ pub use pipe::*;
 
 mod pipe;
 
+#[derive(Debug)]
 pub struct Runtime<'u> {
     unit: &'u Unit,
     /// Instruction pointer.
@@ -27,6 +26,9 @@ pub struct Runtime<'u> {
     monitors: HashMap<(ElfId, Port), (InputPipe<Int>, SantaLine)>,
     /// Output of the santa's deliver command
     pub output: Out,
+    /// IO files
+    in_files: Vec<OutputPipe<Int>>,
+    out_files: Vec<OutFile>,
 }
 
 #[derive(Debug, Clone)]
@@ -35,6 +37,7 @@ pub enum Out {
     Buffer(String),
 }
 
+#[derive(Debug)]
 pub struct Elf {
     /// Instruction pointer
     ip: ElfLine,
@@ -105,6 +108,16 @@ enum Event {
     Write(Port),
 }
 
+struct OutFile {
+    pipe: InputPipe<Int>,
+    writer: Box<dyn io::Write>,
+}
+impl fmt::Debug for OutFile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OutFile").field("pipe", &self.pipe).finish()
+    }
+}
+
 #[rustfmt::skip]
 const ELF_NAMES: [&str; 256] = [
     "Alabaster", "Archibald", "Applejack", "Amberglow", "Astra", "Auburn", "Aurora", "Amity", "Aurelian", "Azura", "Aspen",
@@ -148,6 +161,9 @@ impl<'u> Runtime<'u> {
             }]),
             monitors: Default::default(),
             output: Out::Std,
+
+            in_files: Vec::new(),
+            out_files: Vec::new(),
         }
     }
 
@@ -157,8 +173,12 @@ impl<'u> Runtime<'u> {
 
     pub fn run(&mut self, cmd: RunCommand) -> Result<RunOk, Error> {
         let mut last = None;
+        let mut steps = 0u64;
 
-        while let Some(mut next) = self.schedule.pop_front() {
+        let result = loop {
+            let Some(mut next) = self.schedule.pop_front() else {
+                break Ok(RunOk::Done);
+            };
             if Some(next) != last {
                 log::debug!("Scheduling {next:?}");
                 last = Some(next);
@@ -188,7 +208,7 @@ impl<'u> Runtime<'u> {
                         stack,
                     };
                     self.reset();
-                    return Err(error);
+                    break Err(error);
                 }
             };
 
@@ -216,8 +236,15 @@ impl<'u> Runtime<'u> {
                 }
                 _ => {}
             }
-        }
-        Ok(RunOk::Done)
+
+            steps += 1;
+            if steps % (1 << 10) == 0 {
+                self.flush_outs();
+            }
+        };
+
+        self.flush_outs();
+        result
     }
 
     fn step_santa(&mut self, ip: &mut usize, until: &usize) -> Result<Option<Event>, ECode> {
@@ -282,6 +309,34 @@ impl<'u> Runtime<'u> {
                 }
                 None
             }
+            SantaCode::OpenRead { file, dst } => {
+                let content = fs::read_to_string(file.as_ref()).unwrap();
+                let elfid = self.santa_result[dst.0];
+                if let Some(elf) = self.elves.get_mut(&elfid) {
+                    // this will produce closed pipe
+                    let input = elf.ensure_input(dst.1, &mut OutputPipe::new());
+                    for c in content.chars() {
+                        input.write_direct(c as Int);
+                    }
+                } else {
+                    panic!("bug: unknown elf {elfid}");
+                }
+                None
+            }
+            SantaCode::OpenWrite { src, file } => {
+                let wr = io::BufWriter::new(fs::File::create(&**file).expect(&file));
+                let elfid = self.santa_result[src.0];
+                if let Some(elf) = self.elves.get_mut(&elfid) {
+                    let file_pipe = InputPipe::new_connected(elf.ensure_output(src.1));
+                    self.out_files.push(OutFile {
+                        pipe: file_pipe,
+                        writer: Box::new(wr),
+                    });
+                } else {
+                    panic!("bug: unknown elf {elfid}\n{self:?}");
+                }
+                None
+            }
             SantaCode::Monitor { port, block_len } => {
                 let elf_id = self.santa_result[port.0];
                 let port = port.1;
@@ -301,7 +356,7 @@ impl<'u> Runtime<'u> {
             SantaCode::Receive(elf_line, port) => {
                 let elf_id = self.santa_result[*elf_line];
 
-                let monitor = &self.monitors[&(elf_id, *port)];
+                let monitor = self.monitors.get_mut(&(elf_id, *port)).unwrap();
 
                 match monitor.0.try_read() {
                     Err(InputError::Closed) => Some(Event::Dequeue), // reading closed input hangs forever
@@ -330,7 +385,10 @@ impl<'u> Runtime<'u> {
         let trace_code = code.clone();
         let result = self.santa_result[self.santa_ip];
         let trace = trace.reset(move || {
-            log::trace!("santa: {ip:4} | {:18} -> {result}", format!("{trace_code:?}"));
+            log::trace!(
+                "santa: {ip:4} | {:18} -> {result}",
+                format!("{trace_code:?}")
+            );
         });
 
         _ = _g;
@@ -387,7 +445,7 @@ impl<'u> Runtime<'u> {
                 if elf.stack.is_empty() {
                     next_ip = target;
                 }
-            },
+            }
             Arith(op) => {
                 let result = op.invoke(elf.top_val(1)?, elf.top_val(0)?)?;
                 elf.stack.pop();
@@ -419,11 +477,11 @@ impl<'u> Runtime<'u> {
             }
             Read(slot) => {
                 elf.stack.push(elf.sleeve[slot as usize]);
-            },
+            }
             Write(slot) => {
                 elf.sleeve[slot as usize] = elf.top_val(0)?;
                 elf.stack.pop();
-            },
+            }
             StackLen => {
                 elf.stack.push(elf.stack.len() as Int);
             }
@@ -447,6 +505,15 @@ impl<'u> Runtime<'u> {
         _ = _g;
         elf.ip = next_ip;
         Ok(event)
+    }
+
+    fn flush_outs(&mut self) {
+        for f in self.out_files.iter_mut() {
+            while let Ok(v) = f.pipe.try_read() {
+                let c = v as u8 as char; // TODO: better encoding
+                write!(&mut f.writer, "{c}").unwrap();
+            }
+        }
     }
 }
 

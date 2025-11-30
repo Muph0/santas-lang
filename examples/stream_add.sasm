@@ -7,16 +7,12 @@ workshop emit:
     ;
 ;
 
-
-
 workshop add:
     floorplan:
         m> I1 I2 +_ O1 mv
         m^ e<          m<
     ;
 ;
-
-
 
 Santa will:
     # HELLO WORLD = 8 5 12 12 15 0 23 15 18 12 4

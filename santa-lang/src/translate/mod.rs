@@ -111,12 +111,32 @@ fn emit_todos(
                 });
             }
             ToDo::Connect { src, dst } => {
-                let src_elf = identifiers[&src.0.string];
-                let dst_elf = identifiers[&dst.0.string];
-                scode.push(SantaCode::Connect {
-                    src: (src_elf, to_port(src.1)),
-                    dst: (dst_elf, to_port(dst.1)),
-                });
+                use crate::parse::Connection::*;
+                match (src, dst) {
+                    (Port(src_id, src_port), Port(dst_id, dst_port)) => {
+                        let src_elf = identifiers[&src_id.string];
+                        let dst_elf = identifiers[&dst_id.string];
+                        scode.push(SantaCode::Connect {
+                            src: (src_elf, to_port(*src_port)),
+                            dst: (dst_elf, to_port(*dst_port)),
+                        });
+                    }
+                    (File(name), Port(dst_id, dst_port)) => {
+                        let dst_elf = identifiers[&dst_id.string];
+                        scode.push(SantaCode::OpenRead {
+                            file: name.string.clone(),
+                            dst: (dst_elf, to_port(*dst_port)),
+                        });
+                    }
+                    (Port(src_id, src_port), File(name)) => {
+                        let src_elf = identifiers[&src_id.string];
+                        scode.push(SantaCode::OpenWrite {
+                            src: (src_elf, to_port(*src_port)),
+                            file: name.string.clone(),
+                        });
+                    }
+                    _ => todo!("{src:?} -> {dst:?}"),
+                }
             }
             ToDo::Monitor { target, todos } => {
                 let elfid = identifiers[&target.0.string];

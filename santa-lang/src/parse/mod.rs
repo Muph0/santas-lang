@@ -99,8 +99,8 @@ pub enum ToDo<S> {
     },
     /// Connect output of one shop to input of another shop.
     Connect {
-        src: (S, char),
-        dst: (S, char),
+        src: Connection<S>,
+        dst: Connection<S>,
     },
     /// Monitor a pipe and do stuff with incoming message.
     Monitor {
@@ -118,6 +118,13 @@ pub enum ToDo<S> {
     Deliver {
         e: Expr<S>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Connection<S> {
+    Port(S, char),
+    File(S),
+    Std,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -193,8 +200,8 @@ impl<S> ToDo<S> {
                 stack,
             },
             Connect { src, dst } => Connect {
-                src: (f(src.0), src.1),
-                dst: (f(dst.0), dst.1),
+                src: src.convert(f),
+                dst: dst.convert(f),
             },
             Monitor { target, todos } => Monitor {
                 target: (f(target.0), target.1),
@@ -209,6 +216,16 @@ impl<S> ToDo<S> {
                 values: values.into_iter().map(|x| x.convert(f)).collect(),
             },
             Deliver { e } => Deliver { e: e.convert(f) },
+        }
+    }
+}
+impl<S> Connection<S> {
+    pub fn convert<R>(self, f: &impl Fn(S) -> R) -> Connection<R> {
+        use Connection::*;
+        match self {
+            Port(iden, c) => Port(f(iden), c),
+            File(name) => File(f(name)),
+            Std => Std,
         }
     }
 }

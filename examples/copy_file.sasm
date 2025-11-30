@@ -1,0 +1,17 @@
+
+workshop echo:
+    floorplan:
+        m> e> I1 O1 mv
+        m^          m<
+    ;
+;
+
+Santa will:
+    setup echo for elf Bobo ()
+
+    setup FILE("README.md") -> Bobo.1
+    setup Bobo.1 -> FILE("readme_copy.md")
+;
+
+
+# elf Bobo will copy README to readme_copy and then halt because I1 ends

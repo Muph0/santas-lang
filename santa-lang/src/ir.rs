@@ -27,6 +27,14 @@ pub enum SantaCode {
         src: (SantaLine, Port),
         dst: (SantaLine, Port),
     },
+    OpenRead {
+        file: Arc<str>,
+        dst: (SantaLine, Port),
+    },
+    OpenWrite {
+        src: (SantaLine, Port),
+        file: Arc<str>,
+    },
     Monitor {
         port: (SantaLine, Port),
         block_len: usize,
