@@ -2,8 +2,6 @@
 
 Thematic programing language created for the occasion of [Advent of Code 2025](https://adventofcode.com/2025/about).
 
-- Read the [language reference](./Reference.md)
-
 If you feel particularly adventurous, you can immerse yourself in a programming language
 set (roughly) in the AoC universe. Embrace the true challenge of the AoC and write programs
 as literal blueprints and todo-lists for Santa and his little helpers.
@@ -15,6 +13,8 @@ software, use at your own risk!*
 
 Clone this repository, and run `cargo run` in the root of it.
 You can use cargo to put `santac` on PATH with `cargo install --path santa-comp`.
+
+- Read the [language reference](./Reference.md)
 
 You can then run your programs with
 
