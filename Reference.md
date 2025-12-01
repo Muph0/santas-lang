@@ -6,7 +6,60 @@ Santa delegates execution to a scalable number of elves. Programs are organized
 into workshops, which define the tasks to be performed, while Santa acts as the
 overseer, coordinating and supervising the overall flow.
 
-## Overview
+## Execution model
+
+The program **starts** with the Santa. He performs his ToDo block and can spawn
+multiple elves and connect their ports with pipes. Then he waits for elves to complete,
+optionally monitoring some outgoing ports.
+
+During **execution**, elves work in their workshops, reading messages from incoming
+ports, and sending messages to outgoing ports. They can also send message to Santa,
+writing to a port that he monitors.
+
+The program **stops** when all elves fall asleep. Elf falls asleep in the *Hammock*
+or when reading from a closed port. When an elf falls asleep, all the outgoing ports
+close. This causes connected incoming ports to close, if after this there are
+no more open connected open ports left.
+
+### Elves
+
+Workshop is a grid of two-letter tiles.
+Each elf has their own workshop; they carry a stack of paper and a pencil, with
+which they can perform some arithmetic. They can operate on the top 10 sheets.
+
+They can also write up to 10 numbers on their *sleeve*. Using instructions
+`R0`..`R9` and `W0`..`W9` they can read and write to/from one of the 10 slots.
+
+The elf walks through the workshop like this:
+
+- Elves start on an `e_` tile (their spawn point and facing direction).
+- They walk in a *straight line*, executing instructions in the order they step
+  on them.
+
+- Movement continues until:
+  - A **direction tile** (`m^`, `mv`, `m<`, `m>`) changes their path.
+  - A **conditional tile** (`?=`, `?>`, `?<`) diverts them based on the stack’s
+    top value. Satisfied condition turns them right, otherwise they go left.
+    Either way the top value is consumed.
+
+- Unless redirected, they march endlessly forward, faithfully carrying out Santa’s plan.
+
+### Ports and pipes
+
+Workshops can communicate through pipes. Each elf in a workshop has their own set
+of *input* and *output* ports, and Santa can connect them to other workshop via
+a pipe by the `setup .. -> ..` ToDo.
+
+Inputs and outputs are treated separately, so `I1` reads from input port 1,
+while `O1` writes to output port 1, which is completely separate.
+You can connect them with `setup Elf.1 -> Elf.1` where `Elf` is the name
+of the elf.
+
+See the [stream_add example](./examples/stream_add.sasm) file pls.
+
+---
+
+## Syntax
 
 The program source consists of one or more files. The translation treats them as
 if they were concatenated into one string. Altogether, the module may contain multiple
@@ -45,7 +98,7 @@ leaving `3` on the stack when they fall asleep in the Hammock `Hm`.
 
 ## Santa code
 
-The santa block may contain one or more `ToDo`s.
+The Santa block may contain one or more `ToDo`s.
 
 > `Santa` `will` `:` ToDo list `;`
 
@@ -71,43 +124,6 @@ this pipe, he executes the ToDo list in this monitor block.
 - `deliver` *var*
   - Print the value of *var* to the screen as a single ASCII character.
 
-
----
-
-## Execution model
-
-The santa is prettty lazy, so he will only follow simple instructions without
-any loops or branches.
-
-### Elves
-
-Each elf has their own workshop; they carry a stack of paper and a pencil, with
-which they can perform some arithmetic. They can operate on the top 10 sheets.
-
-They can also write up to 10 numbers on their *sleeve*. Using instructions
-`R0`..`R9` and `W0`..`W9` they can read and write to/from one of the 10 slots.
-
-The elf movement throughout the workshop goes like this:
-
-- Elves start on an `e_` tile (their spawn point and facing direction).
-- They walk in a *straight line*, executing instructions in the order they step
-  on them.
-
-- Movement continues until:
-  - A **direction tile** (`m^`, `mv`, `m<`, `m>`) changes their path.
-  - A **conditional tile** (`?=`, `?>`, `?<`) diverts them based on the stack’s
-    top value. Satisfied condition turns them right, otherwise they go left.
-    Either way the top value is consumed.
-
-- Unless redirected, they march endlessly forward, faithfully carrying out Santa’s plan.
-
-### Ports and pipes
-
-Workshops can communicate through pipes. Each elf in a workshop has their own set
-of input and output *ports*, and santa can connect them to other workshop via a *pipe*
-by the `setup .. -> ..` ToDo.
-
-See the [stream_add example](./examples/stream_add.sasm) file pls.
 
 ---
 
