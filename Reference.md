@@ -146,9 +146,9 @@ A tile always consist of two printable characters. Terminology:
 | `R<n>` | Read sleeve slot `n` and push it on the stack. | TODO |
 | `Hm` | Hammock. Elf falls asleep here, to wait for the next christmas. | -- |
 | `?=` | Pop `n` from the stack, go right if `n` = 0, left otherwise. | `a b` → `a` |
-| `?>` | Pop `n` from the stack, go right if `n` > 0, left otherwise.  | `a b` → `a` |
-| `?<` | Pop `n` from the stack, go right if `n` < 0, left otherwise.  | `a b` → `a` |
-| `?s` | Is stack empty? | TODO |
+| `?>` | Pop `n` from the stack, go right if `n` > 0, left otherwise. | `a b` → `a` |
+| `?<` | Pop `n` from the stack, go right if `n` < 0, left otherwise. | `a b` → `a` |
+| `?s` | Elf goes right when the stack is empty. | -- |
 | `!s` | Push lenght of stack on top. | TODO |
 | `+_`, `-_`, `*_`, `/_`, `%_` | Arithmetic on top two items; consumes both | `+_`: `a b` → `(a+b)` |
 | `+<n>`, `-<n>`, `*<n>`, `/ <n>`, `%<n>` | Arithmetic with constant `<n>`; consumes top | `+<n>`: `a b` → `a (b+<n>)` |
