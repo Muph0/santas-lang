@@ -8,22 +8,20 @@ overseer, coordinating and supervising the overall flow.
 
 ## Execution model
 
-The program **starts** with the Santa. He performs his ToDo block and can spawn
+1. The program **starts** with the Santa. He performs his ToDo block and can spawn
 multiple elves and connect their ports with pipes. Then he waits for elves to complete,
 optionally monitoring some outgoing ports.
-
-During **execution**, elves work in their workshops, reading messages from incoming
+2. During **execution**, elves work in their workshops, reading messages from incoming
 ports, and sending messages to outgoing ports. They can also send message to Santa,
 writing to a port that he monitors.
-
-The program **stops** when all elves fall asleep. Elf falls asleep in the *Hammock*
+3. The program **stops** when all elves fall asleep. Elf falls asleep in the *Hammock*
 or when reading from a closed port. When an elf falls asleep, all the outgoing ports
 close. This causes connected incoming ports to close, if after this there are
 no more open connected open ports left.
 
 ### Elves
 
-Workshop is a grid of two-letter tiles.
+Workshop is a grid of [two-letter tiles](#instruction-tiles-reference).
 Each elf has their own workshop; they carry a stack of paper and a pencil, with
 which they can perform some arithmetic. They can operate on the top 10 sheets.
 
@@ -38,22 +36,21 @@ The elf walks through the workshop like this:
 
 - Movement continues until:
   - A **direction tile** (`m^`, `mv`, `m<`, `m>`) changes their path.
-  - A **conditional tile** (`?=`, `?>`, `?<`) diverts them based on the stack’s
-    top value. Satisfied condition turns them right, otherwise they go left.
-    Either way the top value is consumed.
+  - A **conditional tile** (`?=`, `?>`, `?<`, `?s`) diverts them based on the check.
+    True turns them right, otherwise they go left.
+
 
 - Unless redirected, they march endlessly forward, faithfully carrying out Santa’s plan.
 
 ### Ports and pipes
 
-Workshops can communicate through pipes. Each elf in a workshop has their own set
+Workshops can communicate through pipes. Each elf in a workshop has two sets
 of *input* and *output* ports, and Santa can connect them to other workshop via
 a pipe by the `setup .. -> ..` ToDo.
 
 Inputs and outputs are treated separately, so `I1` reads from input port 1,
 while `O1` writes to output port 1, which is completely separate.
-You can connect them with `setup Elf.1 -> Elf.1` where `Elf` is the name
-of the elf.
+You can connect them with `setup Elf.1 -> Elf.1`.
 
 See the [stream_add example](./examples/stream_add.sasm) file pls.
 
