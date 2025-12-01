@@ -4,10 +4,11 @@ Thematic programing language created for the occasion of [Advent of Code 2025](h
 
 Write programs as literal blueprints and todo-lists for Santa and his little helpers.
 
-## How to get
+## How to use
 
 *A word of warning: this is absolutely not production-level
-software, use at your own risk!*
+software, use at your own risk! If you manage to differentiate
+bugs in the interpreter from bugs in your code, issues are welcome!*
 
 Clone this repository, and run `cargo run` in the root of it.
 You can use cargo to put `santac` on PATH with `cargo install --path santa-comp`.
@@ -17,6 +18,8 @@ You can use cargo to put `santac` on PATH with `cargo install --path santa-comp`
 You can then run your programs with
 
     santac -i my_program.sasm
+
+- Read the [debugging guide](./Debugging.md)
 
 ## Roadmap
 
