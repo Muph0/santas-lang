@@ -43,7 +43,7 @@ peg::parser! { grammar santasm() for str {
         = word("floorplan") ":" p:plan()? _ ";" _ { p.unwrap_or(ShopBlock::empty_plan()) }
 
     pub rule plan() -> ShopBlock<&'input str>
-        = (__ NL()) r1:plan_row(None) rs:plan_row(Some(&r1))* _ { ShopBlock::make_plan(r1, rs) }
+        = (__ NL())+ r1:plan_row(None) rs:plan_row(Some(&r1))* _ { ShopBlock::make_plan(r1, rs) }
 
     rule plan_row(first: Option<&PlanRow<&'input str>>) -> PlanRow<&'input str>
         = i:indent_any() tiles:(plan_tile() ** " ") (__ NL())+ {? PlanRow { indent: i, tiles }.matches(first) }
@@ -67,6 +67,7 @@ peg::parser! { grammar santasm() for str {
         / "?<" { Tile::IsNeg }
         / "?s" { Tile::IsEmpty }
         / "!s" { Tile::Instr(Instr::StackLen) }
+        / "*-" { Tile::Instr(Instr::ArithC(runtime::Op::Mul, -1)) }
         / op:arith_op() "_" { Tile::Instr(Instr::Arith(op)) }
         / op:arith_op() d:digit() { Tile::Instr(Instr::ArithC(op, d as Int)) }
         // s:$(tile_ch()*<2>) { Tile::Unknown(s) }

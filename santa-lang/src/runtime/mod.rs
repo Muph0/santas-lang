@@ -180,7 +180,10 @@ impl<'u> Runtime<'u> {
                 break Ok(RunOk::Done);
             };
             if Some(next) != last {
-                log::debug!("Scheduling {next:?}");
+                match next {
+                    Turn::Elf(id) => log::debug!("Scheduling {next:?} {:?}", self.elves[&id].name),
+                    _ => log::debug!("Scheduling {next:?}"),
+                };
                 last = Some(next);
             }
 
@@ -212,11 +215,18 @@ impl<'u> Runtime<'u> {
                 }
             };
 
-            log::trace!("evt={evt:?}");
+            if evt.is_some() {
+                log::trace!("evt={evt:?}");
+            }
 
             // requeue
             match evt {
-                Some(Event::Dequeue) => {} // no requeue
+                Some(Event::Dequeue) => match next {
+                    Turn::Elf(id) => {
+                        self.elves.remove(&id);
+                    }
+                    _ => {}
+                },
                 Some(Event::Yield | Event::Write(_)) => self.schedule.push_back(next),
                 _ => self.schedule.push_front(next), // else repeat the same `next`
             }
@@ -468,11 +478,13 @@ impl<'u> Runtime<'u> {
                 }
             },
             Out(port) => {
+                let top = elf.top_val(0)?;
+                elf.stack.pop();
                 if let Some(output) = elf.outputs.get(&port) {
-                    let top = elf.top_val(0)?;
                     output.write(top);
-                    elf.stack.pop();
                     event = Some(Event::Write(port));
+                } else {
+                    log::warn!("Elf {:?} writes to unused port {port:?}", elf.name);
                 }
             }
             Read(slot) => {
@@ -569,12 +581,6 @@ impl<'u> fmt::Display for Error<'u> {
             write!(f, "  pos=({x},{y})")?;
         }
         writeln!(f, "  stack: {:?}", self.stack)?;
-
-        // let program_peek = self.room.elf_program.iter().enumerate();
-        // for (i, instr) in program_peek.skip(self.ip.saturating_sub(2)).take(5) {
-        //     let caret = if i == self.ip { '>' } else { ' ' };
-        //     writeln!(f, "{:>5} | {instr:?}", format!("{caret} {i}"))?;
-        // }
 
         Ok(())
     }

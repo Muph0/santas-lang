@@ -114,11 +114,15 @@ fn emit_todos(
                 use crate::parse::Connection::*;
                 match (src, dst) {
                     (Port(src_id, src_port), Port(dst_id, dst_port)) => {
-                        let src_elf = identifiers[&src_id.string];
-                        let dst_elf = identifiers[&dst_id.string];
+                        let src_elf = identifiers
+                            .get(&src_id.string)
+                            .expect(&format!("unknown ident {:?}", src_id.string));
+                        let dst_elf = identifiers
+                            .get(&dst_id.string)
+                            .expect(&format!("unknown ident {:?}", dst_id.string));
                         scode.push(SantaCode::Connect {
-                            src: (src_elf, to_port(*src_port)),
-                            dst: (dst_elf, to_port(*dst_port)),
+                            src: (*src_elf, to_port(*src_port)),
+                            dst: (*dst_elf, to_port(*dst_port)),
                         });
                     }
                     (File(name), Port(dst_id, dst_port)) => {
