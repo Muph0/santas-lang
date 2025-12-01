@@ -2,11 +2,9 @@
 
 Thematic programing language created for the occasion of [Advent of Code 2025](https://adventofcode.com/2025/about).
 
-If you feel particularly adventurous, you can immerse yourself in a programming language
-set (roughly) in the AoC universe. Embrace the true challenge of the AoC and write programs
-as literal blueprints and todo-lists for Santa and his little helpers.
+Write programs as literal blueprints and todo-lists for Santa and his little helpers.
 
-## User manual
+## How to get
 
 *A word of warning: this is absolutely not production-level
 software, use at your own risk!*
@@ -29,6 +27,7 @@ You can then run your programs with
 - [x] dynamic elf creation
 - [x] file IO
 - [ ] indirect piping between elves
+- [ ] polish error messages
 - [ ] translation to LLVM
 - [ ] JIT interpreter
 - [ ] ...compiler?
