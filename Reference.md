@@ -57,6 +57,12 @@ of the elf.
 
 See the [stream_add example](./examples/stream_add.sasm) file pls.
 
+#### Files
+
+It is possible to read from or write to files by setting up a file as an input or output of a pipe. 
+
+See the [copy_file example](./examples/copy_file.sasm) file.
+
 ---
 
 ## Syntax
