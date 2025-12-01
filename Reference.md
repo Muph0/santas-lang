@@ -149,6 +149,7 @@ A tile always consist of two printable characters. Terminology:
 | `?>` | Pop `n` from the stack, go right if `n` > 0, left otherwise. | `a b` → `a` |
 | `?<` | Pop `n` from the stack, go right if `n` < 0, left otherwise. | `a b` → `a` |
 | `?s` | Elf goes right when the stack is empty. | -- |
-| `!s` | Push lenght of stack on top. | TODO |
+| `!s` | Push lenght of stack on top. | `a b` -> `a b <stack len>` |
 | `+_`, `-_`, `*_`, `/_`, `%_` | Arithmetic on top two items; consumes both | `+_`: `a b` → `(a+b)` |
 | `+<n>`, `-<n>`, `*<n>`, `/ <n>`, `%<n>` | Arithmetic with constant `<n>`; consumes top | `+<n>`: `a b` → `a (b+<n>)` |
+| `*-` | Unary minus; multiply top by -1. | `a b` → `a -b` |
