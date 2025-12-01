@@ -1,5 +1,13 @@
 # Language reference
 
+SantAS (Santa Assembly) is a Christmas-Object‑Oriented Programming language designed for
+festive workload distribution. Instead of carrying out every instruction himself,
+Santa delegates execution to a scalable number of elves. Programs are organized
+into workshops, which define the tasks to be performed, while Santa acts as the
+overseer, coordinating and supervising the overall flow.
+
+## Overview
+
 The program source consists of one or more files. The translation treats them as
 if they were concatenated into one string. Altogether, the module may contain multiple
 workshop blocks and one Santa block.
@@ -8,9 +16,12 @@ workshop blocks and one Santa block.
     workshop MyWorkshop2: ... ;
     ...
 
-    Santa will: ... ;
+    Santa will:
+      setup MyWorkshop1 for elf Cringle ()
+      ...
+    ;
 
-You describe the workshop layout and then tell Santa what to do.
+In practice, you describe the workshop layouts and then tell Santa what to do.
 
 ## Workshop description
 
