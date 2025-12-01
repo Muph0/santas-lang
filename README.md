@@ -1,6 +1,6 @@
 # SantAS
 
-Thematic programing language created for [Advent of Code 2025](https://adventofcode.com/2025/about).
+Thematic programing language created for the occasion of [Advent of Code 2025](https://adventofcode.com/2025/about).
 
 - Read the [language reference](./Reference.md)
 
