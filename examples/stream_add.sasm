@@ -1,3 +1,18 @@
+# Example - communication through pipes
+
+# There are 2 emit elves (John and Bobo), 
+# each working in their own “emit” workshop. 
+# They continually emit numbers from their Output port 1.
+
+# The “emit” workshops are both connected to the one “add” workshop by Santa. 
+# John’s pipe is connected to Input port 1 and Bobo’s to Input port 2.
+
+# The Adder elf collects both inputs, sums them together, 
+# and outputs to Output port 1.
+
+# The Santa is monitoring Adder’s Output port. 
+# When a new result appears, Santa receives it and displays it on the screen.
+
 
 workshop emit:
     floorplan:
