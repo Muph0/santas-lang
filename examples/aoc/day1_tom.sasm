@@ -1,0 +1,88 @@
+workshop echo:
+    floorplan:
+                 mv .. .. m<
+                 ..       O1
+                 ..       +_
+                 ..       48
+                 ..    m> m^
+           mv .. .. .. .. .. m<
+           Hm    ..    m^ ?s m^
+                 m> .. .. m^
+        e> m> I1 W0 m> R0 ?>
+                    ..    R0
+                    ..    10
+                    ..    %_
+                    ..    R0
+                    ..    10
+                    ..    /_
+                    ..    W0
+                    m^ .. m<
+    ;
+;
+
+# 1: current number
+# 2: how many numbers remain
+# 3: signum of W2
+# 8: current position
+# 9: zero crossings
+
+workshop process:
+    floorplan:
+                                                                       m> .. mv
+                             m> .. .. .. .. R8 R3 +_ 10 10 *_ %_ D0 W8 ?=    ..
+                             ..                                        ..    ..
+                       mv .. .. .. .. m<                               ..    ..
+                       ..    ..       ..                               R9    ..
+                       mv    m^ .. ?= m^                               +1    ..
+                       ..          R1                                  W9    ..
+                       R2          m^ .. W1 -_ R3 R1 .. .. .. .. .. .. m< .. m<
+                       -1          ..
+                       W2          ..
+                       ..          ..
+                       R2          m^ .. .. .. .. .. .. .. .. m<
+              Hm O1 R9 ?= mv                                  ..
+                       mv m<                                  ..
+                       ..                                     ..
+        e> 50 W8 I2 W2 m> I1 W1 .. .. mv    m> .. mv          ..
+                                      ..    *_    ..          ..
+                                      ..    -1    ..          ..
+                                      ..    00    ..          R3
+                                      ..    R1    ..          ..
+                                      m> R1 ?>    m> R1 /_ W3 m^
+                                            R1    ..
+                                            m> .. m^
+
+    ;
+;
+
+workshop input:
+    floorplan:
+           mv .. m<
+           ..    ..
+           ..    W0
+           ..    +1
+           ..    R0
+           ..    ..
+           ..    O1
+        e> m> .. ?s
+                 R0
+                 O2
+                 Hm
+    ;
+;
+
+Santa will:
+    setup input for elf Inputini (-82 14 -99 -1 -55 60 -5 48 -30 -68)
+
+    setup process for elf Soluterino ()
+    setup echo for elf Echoini ()
+
+    setup Inputini.1 -> Soluterino.1
+    setup Inputini.2 -> Soluterino.2
+    setup Soluterino.1 -> Echoini.1
+
+    monitor Echoini.1:
+        receive x
+        deliver x
+    ;
+;
