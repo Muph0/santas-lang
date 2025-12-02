@@ -13,12 +13,14 @@ use loc::{LineMap, SourceStr};
 
 mod elf;
 mod loc;
+mod ident;
 
 pub use loc::Loc;
 
 #[derive(Debug, Clone)]
 pub enum TranslationInput {
     File(PathBuf),
+    Buffer { name: Option<String>, text: String },
 }
 
 #[derive(Debug, Clone)]
@@ -238,6 +240,10 @@ fn read_into_unit(
                     }
                 }
             }
+            TranslationInput::Buffer { name, text } => {
+                source_name = name.unwrap_or_else(|| "anonymous".into()).into();
+                source = text;
+            }
         }
 
         let map = LineMap::new(&source_name, &source);
@@ -356,5 +362,46 @@ impl Error {
             loc: Some(token.loc.clone()),
             code,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        ir::Unit,
+        translate::{Error, TranslationInput},
+    };
+
+    fn make_unit(src: &str) -> Result<Unit, Vec<Error>> {
+        super::translate(vec![TranslationInput::Buffer {
+            name: None,
+            text: src.into(),
+        }])
+    }
+
+    #[test]
+    fn loopback_port() {
+        let unit = make_unit(
+            "
+
+            workshop emit_stack:
+                floorplan:
+                    mv m<
+                    ev O1
+                    m> ?s
+                       m> I1 Oo mv
+                       m^       m<
+                ;
+            ;
+
+            Santa will:
+                setup emit_stack for elf Baba (1 2 3 4 5 6 7)
+                setup Baba.1 -> Baba.1
+            ;
+
+            ",
+        );
+
+        unit.unwrap();
     }
 }

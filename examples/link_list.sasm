@@ -1,0 +1,24 @@
+
+workshop list:
+    floorplan:
+        e> Ii Ii D1 10 Hm
+    ;
+    Santa will:
+        monitor $.s:
+            receive i
+            setup node for elf N()
+            send i to N.i
+            setup $.n -> N.i
+        ;
+    ;
+;
+
+workshop node:
+    # sleeve: (prev, value, next)
+    floorplan:
+        e>
+    ;
+    Santa will:
+        monitor
+    ;
+;

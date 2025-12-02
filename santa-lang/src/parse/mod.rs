@@ -37,8 +37,15 @@ type Indent = (char, usize);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlanRow<S> {
+    pub text: S,
     pub indent: Indent,
     pub tiles: Vec<Tile<S>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Tile<S> {
+    pub text: S,
+    pub kind: TileKind,
 }
 
 /// Elf walks on tiles in a straight line, unless
@@ -46,7 +53,7 @@ pub struct PlanRow<S> {
 /// - Instr::Hammock tells him to halt
 /// - He walks into a wall or Unknown, which is error
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Tile<S> {
+pub enum TileKind {
     Empty,
     Move(Direction),
     /// Starting point, has no effect if walked on later.
@@ -58,7 +65,15 @@ pub enum Tile<S> {
     /// Is the stack empty?
     IsEmpty,
     Instr(runtime::Instr),
-    Unknown(S),
+    Unknown,
+}
+impl TileKind {
+    fn is_empty(&self) -> bool {
+        match self {
+            TileKind::Empty => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -175,18 +190,10 @@ impl<S> ShopBlock<S> {
     }
 }
 impl<S> Tile<S> {
-    pub fn convert<R>(self, f: impl Fn(S) -> R) -> Tile<R> {
-        use Tile::*;
-        match self {
-            Empty => Empty,
-            Move(d) => Move(d),
-            Elf(d) => Elf(d),
-            IsNeg => IsNeg,
-            IsPos => IsPos,
-            IsZero => IsZero,
-            IsEmpty => IsEmpty,
-            Instr(i) => Instr(i),
-            Unknown(s) => Unknown(f(s)),
+    pub fn convert<R>(self, f: &impl Fn(S) -> R) -> Tile<R> {
+        Tile {
+            text: f(self.text),
+            kind: self.kind.clone(),
         }
     }
 }

@@ -251,6 +251,13 @@ impl<'u> Runtime<'u> {
             if steps % (1 << 10) == 0 {
                 self.flush_outs();
             }
+
+            match cmd {
+                RunCommand::Step(n) if steps as usize >= n => {
+                    return Ok(RunOk::Stepped(steps as usize));
+                }
+                _ => {}
+            }
         };
 
         self.flush_outs();

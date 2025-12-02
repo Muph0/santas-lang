@@ -2,7 +2,7 @@ use std::collections::{HashMap, VecDeque};
 
 use crate::{
     ir::{Instr, Op, Room},
-    parse::{Direction, Tile},
+    parse::{Direction, Tile, TileKind},
     translate::{ECode, Error, loc::SourceStr},
 };
 
@@ -132,40 +132,41 @@ pub fn translate_plan(
         let idx = elf.x + elf.y * w;
 
         log::trace!("tile {:?}", tiles[idx]);
-        match &tiles[idx] {
-            Tile::Empty | Tile::Elf(_) => {}
-            Tile::Move(dir) => next = elf.with_dir(*dir).step_fwd(),
-            Tile::IsZero => {
+        let tile = &tiles[idx];
+        match &tile.kind {
+            TileKind::Empty | TileKind::Elf(_) => {}
+            TileKind::Move(dir) => next = elf.with_dir(*dir).step_fwd(),
+            TileKind::IsZero => {
                 let true_elf = elf.step_right();
                 let false_elf = elf.step_left();
                 next = true_elf; // true now, false branch will be processed later
                 bfs.push_back((false_elf, Some(emit.len()))); // we save "where from" on the stack because
                 emit.push((Instr::IfNzPtr(emit.len() + 1), elf)); // we dont know where to jump yet (default to here+1=nop)
             }
-            Tile::IsNeg => {
+            TileKind::IsNeg => {
                 next = elf.step_right();
                 emit.push((Instr::ArithC(Op::Add, 1), elf));
                 bfs.push_back((elf.step_left(), Some(emit.len())));
                 emit.push((Instr::IfPosPtr(emit.len() + 1), elf));
             }
-            Tile::IsPos => {
+            TileKind::IsPos => {
                 next = elf.step_left();
                 bfs.push_back((elf.step_right(), Some(emit.len())));
                 emit.push((Instr::IfPosPtr(emit.len() + 1), elf));
             }
-            Tile::IsEmpty => {
+            TileKind::IsEmpty => {
                 next = elf.step_left();
                 bfs.push_back((elf.step_right(), Some(emit.len())));
                 emit.push((Instr::IfEmptyPtr(emit.len() + 1), elf));
             }
-            Tile::Instr(instr) => {
+            TileKind::Instr(instr) => {
                 emit.push((*instr, elf));
                 if *instr == Instr::Hammock {
                     continue;
                 }
             }
-            Tile::Unknown(s) => {
-                errors.push(Error::at(shop_name, ECode::UnknownTile(s.clone())));
+            TileKind::Unknown => {
+                errors.push(Error::at(shop_name, ECode::UnknownTile(tile.text.clone())));
             }
         }
 
@@ -189,8 +190,8 @@ pub fn translate_plan(
 
 impl<S> Tile<S> {
     fn as_elf_start(&self) -> Option<Direction> {
-        match self {
-            Tile::Elf(direction) => Some(*direction),
+        match &self.kind {
+            TileKind::Elf(direction) => Some(*direction),
             _ => None,
         }
     }
