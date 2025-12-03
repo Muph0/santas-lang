@@ -7,13 +7,15 @@
 use peg::{error::ParseError, str::LineCol};
 use std::{collections::HashMap, fmt, fs, path::PathBuf, sync::Arc};
 
+use crate::RecoverResult;
 use crate::ir::{Instr, Room, SantaCode, Unit, to_port};
 use crate::parse::{Expr, ShopBlock, Tile, ToDo, TranslationUnit};
+use crate::translate::ident::Identifiers;
 use loc::{LineMap, SourceStr};
 
 mod elf;
-mod loc;
 mod ident;
+mod loc;
 
 pub use loc::Loc;
 
@@ -41,6 +43,8 @@ pub enum ECode {
     MultipleElfStarts,
     UnknownTile(SourceStr),
     ElfWallHit(usize, usize),
+    IdentifierConflict(SourceStr),
+    UnknownIdentifier(Arc<str>),
 }
 
 pub fn translate(inputs: Vec<TranslationInput>) -> Result<Unit, Vec<Error>> {
@@ -61,7 +65,7 @@ pub fn translate(inputs: Vec<TranslationInput>) -> Result<Unit, Vec<Error>> {
     // translate
     let mut rooms = Vec::new();
     let mut scode = Vec::new();
-    let mut room_index = HashMap::new();
+    let mut identifiers = Identifiers::new();
 
     for (sh_name, sh) in unit.workshops {
         let mut plans = sh.blocks.iter().filter_map(|blk| blk.as_plan());
@@ -76,13 +80,12 @@ pub fn translate(inputs: Vec<TranslationInput>) -> Result<Unit, Vec<Error>> {
 
         let room_opt = elf::translate_plan(&sh_name, plan, &mut errors);
         if let Some(room) = room_opt {
-            room_index.insert(sh_name.string, rooms.len());
+            identifiers.define(&sh_name, rooms.len());
             rooms.push(room);
         }
     }
 
-    let mut identifiers = HashMap::<Arc<str>, usize>::new();
-    emit_todos(&unit.todos, &mut scode, &room_index, &mut identifiers, None);
+    emit_todos(&unit.todos, &mut scode, &mut identifiers, &mut errors, None);
 
     match errors.is_empty() {
         false => Err(errors),
@@ -96,19 +99,19 @@ pub fn translate(inputs: Vec<TranslationInput>) -> Result<Unit, Vec<Error>> {
 fn emit_todos(
     todos: &[ToDo<SourceStr>],
     scode: &mut Vec<SantaCode>,
-    room_index: &HashMap<Arc<str>, usize>,
-    identifiers: &mut HashMap<Arc<str>, usize>,
+    identifiers: &mut Identifiers,
+    errors: &mut Vec<Error>,
     parent_monitor: Option<usize>,
 ) {
     for td in todos {
         match td {
             ToDo::SetupElf { shop, name, stack } => {
                 if let Some(n) = &name {
-                    identifiers.insert(n.string.clone(), scode.len());
+                    identifiers.define(&n, scode.len());
                 }
                 scode.push(SantaCode::SetupElf {
                     name: name.as_ref().map(|s| s.string.to_string()), // TODO Arc::clone
-                    room: room_index[&shop.string],
+                    room: identifiers.get(shop).recover(0, errors),
                     stack: stack.clone(),
                 });
             }
@@ -116,26 +119,22 @@ fn emit_todos(
                 use crate::parse::Connection::*;
                 match (src, dst) {
                     (Port(src_id, src_port), Port(dst_id, dst_port)) => {
-                        let src_elf = identifiers
-                            .get(&src_id.string)
-                            .expect(&format!("unknown ident {:?}", src_id.string));
-                        let dst_elf = identifiers
-                            .get(&dst_id.string)
-                            .expect(&format!("unknown ident {:?}", dst_id.string));
+                        let src_elf = identifiers.get(src_id).recover(0, errors);
+                        let dst_elf = identifiers.get(dst_id).recover(0, errors);
                         scode.push(SantaCode::Connect {
-                            src: (*src_elf, to_port(*src_port)),
-                            dst: (*dst_elf, to_port(*dst_port)),
+                            src: (src_elf, to_port(*src_port)),
+                            dst: (dst_elf, to_port(*dst_port)),
                         });
                     }
                     (File(name), Port(dst_id, dst_port)) => {
-                        let dst_elf = identifiers[&dst_id.string];
+                        let dst_elf = identifiers.get(dst_id).recover(0, errors);
                         scode.push(SantaCode::OpenRead {
                             file: name.string.clone(),
                             dst: (dst_elf, to_port(*dst_port)),
                         });
                     }
                     (Port(src_id, src_port), File(name)) => {
-                        let src_elf = identifiers[&src_id.string];
+                        let src_elf = identifiers.get(src_id).recover(0, errors);
                         scode.push(SantaCode::OpenWrite {
                             src: (src_elf, to_port(*src_port)),
                             file: name.string.clone(),
@@ -145,13 +144,13 @@ fn emit_todos(
                 }
             }
             ToDo::Monitor { target, todos } => {
-                let elfid = identifiers[&target.0.string];
+                let elfid = identifiers.get(&target.0).recover(0, errors);
                 let block_start = scode.len();
                 scode.push(SantaCode::Monitor {
                     port: (elfid, to_port(target.1)),
                     block_len: 0,
                 });
-                emit_todos(todos, scode, room_index, identifiers, Some(block_start));
+                emit_todos(todos, scode, identifiers, errors, Some(block_start));
                 let block_end = scode.len();
                 scode[block_start] = SantaCode::Monitor {
                     port: (elfid, to_port(target.1)),
@@ -160,7 +159,7 @@ fn emit_todos(
             }
             ToDo::Receive { src, vars } => {
                 let port = match (src, parent_monitor) {
-                    (Some(src), _) => (identifiers[&src.0.string], to_port(src.1)),
+                    (Some(src), _) => (identifiers.get(&src.0).recover(0, errors), to_port(src.1)),
                     (None, Some(par)) => {
                         let SantaCode::Monitor { port, .. } = &scode[par] else {
                             panic!("bug: parent block is not monitor")
@@ -171,16 +170,13 @@ fn emit_todos(
                 };
 
                 for v in vars {
-                    let conflict = identifiers.insert(v.string.clone(), scode.len());
-                    if conflict.is_some() {
-                        todo!("error: conflicting identifier \"{}\" {v:?}", v.string);
-                    }
+                    identifiers.define(v, scode.len()).recover((), errors);
                     scode.push(SantaCode::Receive(port.0, port.1));
                 }
             }
             ToDo::Send { dst, values } => {
                 let port = match (dst, parent_monitor) {
-                    (Some(dst), _) => (identifiers[&dst.0.string], to_port(dst.1)),
+                    (Some(dst), _) => (identifiers.get(&dst.0).recover(0, errors), to_port(dst.1)),
                     (None, Some(par)) => {
                         let SantaCode::Monitor { port, .. } = &scode[par] else {
                             panic!("bug: parent block is not monitor")
@@ -193,21 +189,17 @@ fn emit_todos(
                 for v in values {
                     let ip = match v {
                         Expr::Number(n) => todo!("sending constants not implemented"),
-                        Expr::Var(v) => identifiers.get(&v.string).unwrap_or_else(|| {
-                            todo!("error: unknown identifier \"{}\" {v:#?}", v.string)
-                        }),
+                        Expr::Var(v) => identifiers.get(v).recover(0, errors),
                     };
-                    scode.push(SantaCode::Send(port.0, port.1, *ip));
+                    scode.push(SantaCode::Send(port.0, port.1, ip));
                 }
             }
             ToDo::Deliver { e } => {
                 let ip = match e {
                     Expr::Number(n) => todo!("printing constants not implemented"),
-                    Expr::Var(v) => identifiers.get(&v.string).unwrap_or_else(|| {
-                        todo!("error: unknown identifier \"{}\" {v:#?}", v.string)
-                    }),
+                    Expr::Var(v) => identifiers.get(v).recover(0, errors),
                 };
-                scode.push(SantaCode::Deliver(*ip));
+                scode.push(SantaCode::Deliver(ip));
             }
         }
     }
@@ -336,6 +328,10 @@ impl fmt::Display for Error {
                 locations.push(&s.loc);
             }
             ECode::ElfWallHit(x, y) => write!(f, "elf walks into a wall on tile {x},{y}")?,
+            ECode::IdentifierConflict(existing) => {
+                write!(f, "identifier redefined: {}", existing.display_at())?
+            }
+            ECode::UnknownIdentifier(id) => write!(f, "unknown identifier \"{id}\"")?,
         }
 
         if let Some(loc) = &self.loc {

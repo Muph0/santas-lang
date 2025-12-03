@@ -1,4 +1,4 @@
-use std::{hash::Hash, sync::Arc};
+use std::{fmt, hash::Hash, sync::Arc};
 
 use super::{ECode, Error};
 
@@ -20,6 +20,11 @@ pub struct SourceStr {
     pub string: Arc<str>,
     pub loc: Loc,
 }
+impl SourceStr {
+    pub fn display_at(&self) -> impl fmt::Display {
+        DisplaySourceStr(self)
+    }
+}
 impl PartialEq for SourceStr {
     fn eq(&self, other: &Self) -> bool {
         self.string == other.string
@@ -28,6 +33,16 @@ impl PartialEq for SourceStr {
 impl Hash for SourceStr {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.string.hash(state);
+    }
+}
+struct DisplaySourceStr<'a>(&'a SourceStr);
+impl<'a> fmt::Display for DisplaySourceStr<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "\"{}\" at {}:{}:{}",
+            self.0.string, self.0.source_name, self.0.loc.line, self.0.loc.col
+        )
     }
 }
 

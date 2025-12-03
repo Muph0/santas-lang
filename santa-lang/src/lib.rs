@@ -6,6 +6,21 @@ pub mod translate;
 
 pub use parse::parse;
 
+trait RecoverResult<T, E> {
+    fn recover(self, t: T, errors: &mut Vec<E>) -> T;
+}
+impl<T, E> RecoverResult<T, E> for Result<T, E> {
+    fn recover(self, t: T, errors: &mut Vec<E>) -> T {
+        match self {
+            Ok(ok) => ok,
+            Err(e) => {
+                errors.push(e);
+                t
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::runtime::{Instr::*, *};
@@ -161,11 +176,8 @@ pub struct DropGuard<F: FnMut() + 'static> {
 
 impl<F: FnMut() + 'static> DropGuard<F> {
     /// Create a new DropGuard with a given closure
-    pub fn new(f: F) -> Self
-    {
-        DropGuard {
-            action: Some(f),
-        }
+    pub fn new(f: F) -> Self {
+        DropGuard { action: Some(f) }
     }
 
     /// Create a new DropGuard with no closure
