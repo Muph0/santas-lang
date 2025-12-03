@@ -174,15 +174,15 @@ pub fn translate_plan(
     }
 
     Some(Room {
-        tiles: emit
+        tiles: tiles
+            .into_iter()
+            .map(|t| t.clone().convert(&|s| s.string))
+            .collect(),
+        size: (w, h),
+        ip_to_tile: emit
             .iter()
             .enumerate()
-            .map(|(i, (_, elf))| {
-                let s = tiles[elf.x + elf.y * w]
-                    .clone()
-                    .convert(&|t: SourceStr| t.string.clone());
-                (i, (elf.x as i32, elf.y as i32, s))
-            })
+            .map(|(i, (_, elf))| (i, (elf.x, elf.y)))
             .collect(),
         elf_program: emit.iter().map(|(ins, _)| *ins).collect(),
     })

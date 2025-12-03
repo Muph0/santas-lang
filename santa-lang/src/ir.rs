@@ -63,10 +63,20 @@ pub struct PortIdent {
 
 #[derive(Debug)]
 pub struct Room {
-    /// Mapping: ip -> x,y,tile
-    pub tiles: HashMap<usize, (i32, i32, Tile<Arc<str>>)>,
+    /// Mapping: ip -> x,y
+    pub ip_to_tile: HashMap<usize, (usize, usize)>,
+    /// (width, height) tuple
+    pub size: (usize, usize),
+    pub tiles: Vec<Tile<Arc<str>>>,
     pub elf_program: Vec<Instr>,
 }
+impl Room {
+    pub fn get_tile(&self, x:usize,y:usize) -> &Tile<Arc<str>> {
+        debug_assert!(x < self.size.0 && y < self.size.1);
+        &self.tiles[x + y * self.size.0]
+    }
+}
+
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Instr {
@@ -112,8 +122,10 @@ pub fn to_port(src: char) -> Port {
 
 impl Room {
     #[cfg(test)]
-    pub fn test_elf(mut elf_program: Vec<Instr>) -> Self {
+    pub fn new_testing(mut elf_program: Vec<Instr>) -> Self {
         use std::mem;
+
+        use crate::parse::TileKind;
 
         let mut labels: HashMap<&str, usize> = HashMap::new();
         for (i, instr) in elf_program.iter().enumerate() {
@@ -137,7 +149,9 @@ impl Room {
             }
         }
         Self {
-            tiles: Default::default(),
+            ip_to_tile: Default::default(),
+            size: (1,1),
+            tiles: vec![Tile{ text: "  ".into(), kind: TileKind::Empty }],
             elf_program,
         }
     }

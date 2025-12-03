@@ -18,7 +18,7 @@ mod test {
         todo!("hangs");
 
         #[rustfmt::skip]
-        let fizzbuzz = Room::test_elf(vec![      // 100
+        let fizzbuzz = Room::new_testing(vec![      // 100
             Push(1),                        // 100 1
             Label("loop"),
                 Dup(1),                     // 100 1 100
@@ -62,7 +62,7 @@ mod test {
         ]);
 
         #[rustfmt::skip]
-        let print = Room::test_elf(vec![ // num: =-1->Fizz, =-2->Buzz, else print num
+        let print = Room::new_testing(vec![ // num: =-1->Fizz, =-2->Buzz, else print num
             Label("start"),
             In(1),                          // num
 

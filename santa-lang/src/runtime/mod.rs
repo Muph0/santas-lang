@@ -584,7 +584,7 @@ impl<'u> fmt::Display for Error<'u> {
         }?;
 
         if let Some(room) = self.room.map(|i| &self.unit.rooms[i]) {
-            let (x, y, _tile) = room.tiles[&self.ip].clone();
+            let (x, y) = room.ip_to_tile[&self.ip].clone();
             write!(f, "  pos=({x},{y})")?;
         }
         writeln!(f, "  stack: {:?}", self.stack)?;
