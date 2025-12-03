@@ -12,8 +12,6 @@ mod pipe;
 #[derive(Debug)]
 pub struct Runtime<'u> {
     unit: &'u Unit,
-    /// Instruction pointer.
-    pub santa_ip: SantaLine,
     /// Each santa code line can produce a value.
     santa_result: Vec<usize>,
     /// Auto-increment id for new elves
@@ -151,7 +149,6 @@ impl<'u> Runtime<'u> {
     pub fn new(unit: &'u Unit) -> Self {
         Self {
             unit,
-            santa_ip: 0,
             santa_result: vec![0; unit.santa.len()],
             next_elf_id: 0,
             elves: Default::default(),
@@ -237,7 +234,6 @@ impl<'u> Runtime<'u> {
                 Some(Event::Write(port)) => {
                     let key = (next.unwrap_elfid(), port);
                     if let Some(mon) = self.monitors.get(&key) {
-                        self.santa_ip = mon.1 + 1;
                         self.schedule.push_front(Turn::Santa {
                             ip: mon.1 + 1,
                             until: self.unit.santa[mon.1].unwrap_monitor().1,
@@ -264,13 +260,13 @@ impl<'u> Runtime<'u> {
         result
     }
 
-    fn step_santa(&mut self, ip: &mut usize, until: &usize) -> Result<Option<Event>, ECode> {
-        let Some(code) = self.unit.santa.get(self.santa_ip) else {
+    fn step_santa(&mut self, santa_ip: &mut usize, until: &usize) -> Result<Option<Event>, ECode> {
+        let Some(code) = self.unit.santa.get(*santa_ip) else {
             return Ok(Some(Event::Dequeue));
         };
 
-        let mut next_ip = self.santa_ip + 1;
-        let (_g, ip) = (&self.santa_ip, self.santa_ip);
+        let mut next_ip = *santa_ip + 1;
+        let (_g, ip) = (&santa_ip, *santa_ip);
 
         let trace_code: SantaCode = code.clone();
         let trace = DropGuard::new(move || {
@@ -278,7 +274,11 @@ impl<'u> Runtime<'u> {
         });
 
         let event = match code {
-            SantaCode::SetupElf { name, room, stack } => {
+            SantaCode::Const(n) => {
+                self.santa_result[ip] = *n as usize;
+                None
+            }
+            SantaCode::SetupElf { name, room, init_stack } => {
                 let new = Elf {
                     ip: 0,
                     room: *room,
@@ -286,7 +286,7 @@ impl<'u> Runtime<'u> {
                     name: name.clone().unwrap_or_else(|| {
                         ELF_NAMES[self.next_elf_id % ELF_NAMES.len()].to_string()
                     }),
-                    stack: stack.clone(),
+                    stack: init_stack.iter().map(|&it| self.santa_result[it] as Int).collect(),
                     sleeve: Box::new([0; 10]),
                     inputs: Default::default(),
                     outputs: Default::default(),
@@ -295,7 +295,7 @@ impl<'u> Runtime<'u> {
                 self.next_elf_id += 1;
 
                 self.schedule.push_back(Turn::Elf(new.id));
-                self.santa_result[self.santa_ip] = new.id;
+                self.santa_result[ip] = new.id;
                 self.elves.insert(new.id, new);
                 None
             }
@@ -363,11 +363,11 @@ impl<'u> Runtime<'u> {
                     .unwrap_or_else(|| panic!("{port:?}, {block_len}"));
                 let output = elf.ensure_output(port);
 
-                let v = (InputPipe::new_connected(output), self.santa_ip);
+                let v = (InputPipe::new_connected(output), ip);
                 let conflict = self.monitors.insert((elf_id, port), v);
 
                 assert!(conflict.is_none(), "port=({elf_id}, {port})");
-                next_ip = self.santa_ip + *block_len;
+                next_ip = ip + *block_len;
                 None
             }
             SantaCode::Receive(elf_line, port) => {
@@ -378,17 +378,16 @@ impl<'u> Runtime<'u> {
                 match monitor.0.try_read() {
                     Err(InputError::Closed) => Some(Event::Dequeue), // reading closed input hangs forever
                     Err(InputError::Empty) => {
-                        next_ip = self.santa_ip; // will re-read in next cycle
+                        next_ip = ip; // will re-read in next cycle
                         Some(Event::Yield)
                     }
                     Ok(recvd) => {
-                        self.santa_result[self.santa_ip] = recvd as _;
+                        self.santa_result[ip] = recvd as _;
                         None
                     }
                 }
             }
             SantaCode::Send(_, _, _) => todo!(),
-            SantaCode::SendConst(_, _, _) => todo!(),
             SantaCode::Deliver(line) => {
                 let c = self.santa_result[*line] as u8 as char;
                 match &mut self.output {
@@ -400,7 +399,7 @@ impl<'u> Runtime<'u> {
         };
 
         let trace_code = code.clone();
-        let result = self.santa_result[self.santa_ip];
+        let result = self.santa_result[ip];
         let trace = trace.reset(move || {
             log::trace!(
                 "santa: {ip:4} | {:18} -> {result}",
@@ -409,7 +408,7 @@ impl<'u> Runtime<'u> {
         });
 
         _ = _g;
-        self.santa_ip = next_ip;
+        *santa_ip = next_ip;
         Ok(event)
     }
 

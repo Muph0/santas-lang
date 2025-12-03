@@ -17,11 +17,13 @@ pub type SantaLine = usize;
 pub type ElfLine = usize;
 
 #[derive(Debug, Clone)]
+/// Represents a SSA-like instruction
 pub enum SantaCode {
+    Const(Int),
     SetupElf {
         name: Option<String>,
         room: RoomId,
-        stack: Vec<Int>,
+        init_stack: Vec<SantaLine>,
     },
     Connect {
         src: (SantaLine, Port),
@@ -43,7 +45,6 @@ pub enum SantaCode {
     Receive(SantaLine, Port),
     /// send (elf, port, expr)
     Send(SantaLine, Port, SantaLine),
-    SendConst(SantaLine, Port, Int),
     Deliver(SantaLine),
 }
 impl SantaCode {

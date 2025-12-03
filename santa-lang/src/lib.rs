@@ -143,12 +143,12 @@ mod test {
             SantaCode::SetupElf {
                 name: None,
                 room: 0,
-                stack: vec![100],
+                init_stack: vec![100],
             },
             SantaCode::SetupElf {
                 name: None,
                 room: 1,
-                stack: vec![100],
+                init_stack: vec![100],
             },
             SantaCode::Monitor {
                 port: (1, PRINT),

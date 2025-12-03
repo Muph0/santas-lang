@@ -110,7 +110,7 @@ pub enum ToDo<S> {
     SetupElf {
         shop: S,
         name: Option<S>,
-        stack: Vec<Int>,
+        stack: Vec<Expr<S>>,
     },
     /// Connect output of one shop to input of another shop.
     Connect {
@@ -204,7 +204,7 @@ impl<S> ToDo<S> {
             SetupElf { name, stack, shop } => SetupElf {
                 name: name.map(f),
                 shop: f(shop),
-                stack,
+                stack: stack.into_iter().map(|i| i.convert(f)).collect(),
             },
             Connect { src, dst } => Connect {
                 src: src.convert(f),

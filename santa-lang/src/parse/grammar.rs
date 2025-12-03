@@ -103,7 +103,7 @@ peg::parser! { grammar santasm() for str {
         }
 
     rule todo_item() -> ToDo<&'input str>
-        = word("setup") shop:ident() word("for") h:helper_type() name:ident()? "(" stack:numInt()* ")"
+        = word("setup") shop:ident() word("for") h:helper_type() name:ident()? "(" stack:val_expr()* ")"
             { match h {
                 HelperType::Elf => ToDo::SetupElf { name, stack, shop },
                 HelperType::Raindeer => todo!("raindeer"),
@@ -124,8 +124,8 @@ peg::parser! { grammar santasm() for str {
         // word("raindeer") { HelperType::Raindeer }
 
     rule connection(std: &'static str) -> Connection<&'input str>
-        = word(std) { Connection::Std }
-        / word("FILE") "(" name:strlit() ")" _ { Connection::File(name) }
+        = word("FILE") "(" name:strlit() ")" _ { Connection::File(name) }
+        // word(std) { Connection::Std }
         / p:helper_port() { Connection::Port(p.0, p.1) }
 
     rule helper_port() -> (&'input str, char)
@@ -441,7 +441,7 @@ mod test {
                 ToDo::SetupElf {
                     shop: "toys",
                     name: Some("Josh".into()),
-                    stack: vec![1, 2, 3],
+                    stack: vec![Expr::Number(1), Expr::Number(2), Expr::Number(3)],
                 },
                 ToDo::SetupElf {
                     shop: "prod",
@@ -470,7 +470,7 @@ mod test {
                         ToDo::SetupElf {
                             shop: "sweets",
                             name: Some("Alice".into()),
-                            stack: vec![4, 5],
+                            stack: vec![Expr::Number(4), Expr::Number(5)],
                         },
                     ],
                 },

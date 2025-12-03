@@ -109,10 +109,21 @@ fn emit_todos(
                 if let Some(n) = &name {
                     identifiers.define(&n, scode.len());
                 }
+                let mut init_stack = Vec::new();
+                for expr in stack {
+                    let line = match expr {
+                        Expr::Number(constant) => {
+                            scode.push(SantaCode::Const(*constant));
+                            scode.len() - 1
+                        },
+                        Expr::Var(id) => identifiers.get(id).recover(0, errors),
+                    };
+                    init_stack.push(line);
+                }
                 scode.push(SantaCode::SetupElf {
                     name: name.as_ref().map(|s| s.string.to_string()), // TODO Arc::clone
                     room: identifiers.get(shop).recover(0, errors),
-                    stack: stack.clone(),
+                    init_stack,
                 });
             }
             ToDo::Connect { src, dst } => {
@@ -188,7 +199,10 @@ fn emit_todos(
 
                 for v in values {
                     let ip = match v {
-                        Expr::Number(n) => todo!("sending constants not implemented"),
+                        Expr::Number(n) => {
+                            scode.push(SantaCode::Const(*n));
+                            scode.len() - 1
+                        },
                         Expr::Var(v) => identifiers.get(v).recover(0, errors),
                     };
                     scode.push(SantaCode::Send(port.0, port.1, ip));
@@ -196,7 +210,10 @@ fn emit_todos(
             }
             ToDo::Deliver { e } => {
                 let ip = match e {
-                    Expr::Number(n) => todo!("printing constants not implemented"),
+                    Expr::Number(n) => {
+                        scode.push(SantaCode::Const(*n));
+                        scode.len() - 1
+                    },
                     Expr::Var(v) => identifiers.get(v).recover(0, errors),
                 };
                 scode.push(SantaCode::Deliver(ip));
